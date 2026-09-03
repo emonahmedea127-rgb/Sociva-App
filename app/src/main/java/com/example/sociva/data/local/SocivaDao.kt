@@ -413,4 +413,71 @@ interface SocivaDao {
 
   @Query("DELETE FROM reports WHERE id = :reportId")
   suspend fun deleteReport(reportId: String)
+
+  // Relationships
+  @Query("SELECT * FROM relationships WHERE (requesterId = :userId OR receiverId = :userId) AND status = 'accepted' LIMIT 1")
+  fun getActiveRelationship(userId: String): Flow<RelationshipEntity?>
+
+  @Query("SELECT * FROM relationships WHERE (requesterId = :userId OR receiverId = :userId) AND status = 'accepted' LIMIT 1")
+  suspend fun getActiveRelationshipSync(userId: String): RelationshipEntity?
+
+  @Query("SELECT * FROM relationships WHERE receiverId = :userId AND status = 'pending' ORDER BY createdAt DESC")
+  fun getIncomingRelationshipRequests(userId: String): Flow<List<RelationshipEntity>>
+
+  @Query("SELECT * FROM relationships WHERE requesterId = :userId AND status = 'pending' ORDER BY createdAt DESC")
+  fun getSentRelationshipRequests(userId: String): Flow<List<RelationshipEntity>>
+
+  @Query("SELECT * FROM relationships WHERE ((requesterId = :userA AND receiverId = :userB) OR (requesterId = :userB AND receiverId = :userA)) AND status = 'pending' LIMIT 1")
+  suspend fun getPendingRelationshipBetween(userA: String, userB: String): RelationshipEntity?
+
+  @Query("SELECT * FROM relationships WHERE id = :relationshipId LIMIT 1")
+  suspend fun getRelationshipById(relationshipId: String): RelationshipEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertRelationship(relationship: RelationshipEntity)
+
+  @Update
+  suspend fun updateRelationship(relationship: RelationshipEntity)
+
+  @Query("DELETE FROM relationships WHERE id = :relationshipId")
+  suspend fun deleteRelationship(relationshipId: String)
+
+  @Query("DELETE FROM relationships WHERE (requesterId = :userA AND receiverId = :userB) OR (requesterId = :userB AND receiverId = :userA)")
+  suspend fun deleteRelationshipsBetween(userA: String, userB: String)
+
+  @Query("UPDATE users SET relationshipStatus = :status, relationshipPartnerId = :partnerId, relationshipPartnerName = :partnerName WHERE id = :userId")
+  suspend fun updateUserRelationship(userId: String, status: String, partnerId: String?, partnerName: String?)
+
+  // Post Tags
+  @Query("SELECT * FROM post_tags WHERE postId = :postId AND status = 'approved'")
+  fun getPostTagsFlow(postId: String): Flow<List<PostTagEntity>>
+
+  @Query("SELECT * FROM post_tags WHERE postId = :postId AND status = 'approved'")
+  suspend fun getPostTags(postId: String): List<PostTagEntity>
+
+  @Query("SELECT p.* FROM posts p INNER JOIN post_tags pt ON p.id = pt.postId WHERE pt.taggedUserId = :userId AND pt.status = 'approved' ORDER BY p.timestamp DESC")
+  fun getTaggedPostsForUser(userId: String): Flow<List<PostEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPostTag(tag: PostTagEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPostTags(tags: List<PostTagEntity>)
+
+  @Query("DELETE FROM post_tags WHERE postId = :postId AND taggedUserId = :userId")
+  suspend fun removePostTag(postId: String, userId: String)
+
+  @Query("UPDATE post_tags SET status = :status WHERE postId = :postId AND taggedUserId = :userId")
+  suspend fun updatePostTagStatus(postId: String, userId: String, status: String)
+
+  // Comment Mentions
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCommentMention(mention: CommentMentionEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCommentMentions(mentions: List<CommentMentionEntity>)
+
+  @Query("SELECT * FROM comment_mentions WHERE commentId = :commentId")
+  suspend fun getCommentMentions(commentId: String): List<CommentMentionEntity>
 }
+

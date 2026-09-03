@@ -106,6 +106,7 @@ fun MediaPickerActionBar(
   onPickMedia: () -> Unit,
   onPickCamera: () -> Unit,
   onFeelingClick: () -> Unit,
+  onTagPeopleClick: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   Card(
@@ -158,6 +159,21 @@ fun MediaPickerActionBar(
             tint = SocivaBlue,
             modifier = Modifier.size(24.dp)
           )
+        }
+
+        // Tag People Button
+        if (onTagPeopleClick != null) {
+          IconButton(
+            onClick = onTagPeopleClick,
+            modifier = Modifier.testTag("composer_pick_tag_btn")
+          ) {
+            Icon(
+              imageVector = Icons.Default.PersonAdd,
+              contentDescription = "Tag People",
+              tint = Color(0xFF8B5CF6),
+              modifier = Modifier.size(24.dp)
+            )
+          }
         }
 
         // Feeling / Activity Button

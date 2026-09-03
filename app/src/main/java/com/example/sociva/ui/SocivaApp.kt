@@ -123,6 +123,13 @@ fun SocivaApp(
       )
       return
     }
+    SocivaScreen.EDIT_PROFILE -> {
+      EditProfileScreen(
+        viewModel = viewModel,
+        onBack = { viewModel.navigateTo(SocivaScreen.PROFILE) }
+      )
+      return
+    }
     SocivaScreen.SEARCH -> {
       SearchScreen(
         viewModel = viewModel,

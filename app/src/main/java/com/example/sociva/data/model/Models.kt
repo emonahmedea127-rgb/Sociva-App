@@ -23,11 +23,38 @@ enum class NotificationType(val title: String) {
   ACCEPT_REQUEST("accepted your friend request"),
   FOLLOW("started following you"),
   MESSAGE("sent you a message"),
-  MENTION("mentioned you in a post"),
+  MENTION("mentioned you in a comment"),
   STORY_REACTION("reacted to your story"),
   COMMENT_REACTION("reacted to your comment"),
-  COMMENT_REPLY("replied to your comment")
+  COMMENT_REPLY("replied to your comment"),
+  RELATIONSHIP_REQUEST("wants to list you as their partner"),
+  RELATIONSHIP_ACCEPTED("accepted your relationship request"),
+  RELATIONSHIP_DECLINED("declined your relationship request"),
+  TAG("tagged you in a post")
 }
+
+data class TaggedUser(
+  val id: String,
+  val fullName: String,
+  val username: String,
+  val avatarUrl: String = ""
+)
+
+data class RelationshipItem(
+  val id: String,
+  val requesterId: String,
+  val receiverId: String,
+  val relationshipType: String,
+  val customText: String? = null,
+  val status: String = "pending", // "pending", "accepted", "declined", "cancelled"
+  val privacy: String = "Public",
+  val requesterName: String = "",
+  val requesterAvatar: String = "",
+  val receiverName: String = "",
+  val receiverAvatar: String = "",
+  val createdAt: Long = System.currentTimeMillis(),
+  val updatedAt: Long = System.currentTimeMillis()
+)
 
 data class User(
   val id: String,
@@ -50,7 +77,49 @@ data class User(
   val isFriend: Boolean = false,
   val isFollowing: Boolean = false,
   val profilePictureUpdatedAt: Long = 0L,
-  val coverPhotoUpdatedAt: Long = 0L
+  val coverPhotoUpdatedAt: Long = 0L,
+  // Section A: Basic Information
+  val firstName: String = "",
+  val lastName: String = "",
+  val pronouns: String = "",
+  val nickname: String = "",
+  val otherNames: String = "",
+  // Section B: Personal Information
+  val dateOfBirth: String = "",
+  val gender: String = "",
+  val interestedIn: String = "",
+  val hometown: String = "",
+  val currentCity: String = "",
+  val country: String = "",
+  // Work Information
+  val workplace: String = "",
+  val workPosition: String = "",
+  val workStartDate: String = "",
+  val workEndDate: String = "",
+  // Education Information
+  val school: String = "",
+  val college: String = "",
+  val university: String = "",
+  val degree: String = "",
+  val fieldOfStudy: String = "",
+  val graduationYear: String = "",
+  // Contact Information
+  val website: String = "",
+  val email: String = "",
+  val phone: String = "",
+  // Relationship Status & Partner
+  val relationshipStatus: String = "Single",
+  val relationshipPartnerId: String? = null,
+  val relationshipPartnerName: String? = null,
+  val customRelationshipText: String? = null,
+  // Privacy Controls
+  val birthdayPrivacy: String = "Public",
+  val currentCityPrivacy: String = "Public",
+  val hometownPrivacy: String = "Public",
+  val relationshipPrivacy: String = "Public",
+  val emailPrivacy: String = "Friends",
+  val taggingPermission: String = "ALLOW_ANYONE",
+  val reviewTagsBeforeAppearing: Boolean = false
 )
 
 data class Post(
@@ -69,7 +138,8 @@ data class Post(
   val commentsCount: Int = 0,
   val sharesCount: Int = 0,
   val myReaction: ReactionType? = null,
-  val isSaved: Boolean = false
+  val isSaved: Boolean = false,
+  val taggedUsers: List<TaggedUser> = emptyList()
 )
 
 data class Comment(
@@ -170,7 +240,9 @@ data class NotificationItem(
   val messageSnippet: String,
   val timestamp: Long,
   val isRead: Boolean = false,
-  val targetPostId: String? = null
+  val targetPostId: String? = null,
+  val actionData: String? = null,
+  val senderId: String = ""
 )
 
 enum class FriendStatus {

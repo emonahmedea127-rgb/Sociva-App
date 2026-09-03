@@ -46,7 +46,21 @@ fun HomeScreen(
   val posts by viewModel.allPosts.collectAsState()
   val stories by viewModel.activeStories.collectAsState()
   val currentUser by viewModel.currentUser.collectAsState()
+  val friends by viewModel.friends.collectAsState()
   val context = LocalContext.current
+
+  val friendIds = remember(friends) { friends.map { it.id }.toSet() }
+  val visiblePosts = remember(posts, currentUser, friendIds) {
+    posts.filter { post ->
+      val isMyPost = post.authorId == currentUser?.id
+      if (isMyPost) return@filter true
+      when (post.audience) {
+        PostAudience.ONLY_ME -> false
+        PostAudience.FRIENDS -> post.authorId in friendIds
+        PostAudience.PUBLIC -> true
+      }
+    }
+  }
 
   // 1. Direct Story Media Picker Launcher (Home -> Create Story -> Native Picker -> Story Editor)
   val storyMediaPickerLauncher = rememberLauncherForActivityResult(
@@ -109,7 +123,7 @@ fun HomeScreen(
     }
 
     // 3. Feed Posts
-    items(posts, key = { it.id }) { post ->
+    items(visiblePosts, key = { it.id }) { post ->
       PostCard(
         post = post,
         currentUser = currentUser,
@@ -121,7 +135,8 @@ fun HomeScreen(
         onDeleteClick = { viewModel.deletePost(post.id) },
         onReportClick = {
           viewModel.submitReport("Post", post.id, post.content.take(40), "Inappropriate or spam content")
-        }
+        },
+        onRemoveTagClick = { viewModel.removePostTag(post.id) }
       )
     }
   }
@@ -462,7 +477,8 @@ fun PostCard(
   onSaveClick: () -> Unit,
   onAuthorClick: () -> Unit,
   onDeleteClick: () -> Unit,
-  onReportClick: () -> Unit
+  onReportClick: () -> Unit,
+  onRemoveTagClick: (() -> Unit)? = null
 ) {
   var showMenu by remember { mutableStateOf(false) }
   var showReactionPicker by remember { mutableStateOf(false) }
@@ -494,7 +510,7 @@ fun PostCard(
         Spacer(modifier = Modifier.width(10.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
               text = post.authorName,
               style = MaterialTheme.typography.titleSmall,
@@ -505,6 +521,19 @@ fun PostCard(
             if (post.isAuthorVerified) {
               Spacer(modifier = Modifier.width(4.dp))
               VerifiedBadge(size = 14.dp)
+            }
+            if (post.taggedUsers.isNotEmpty()) {
+              Text(
+                text = " with ",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                text = if (post.taggedUsers.size == 1) post.taggedUsers.first().fullName else "${post.taggedUsers.first().fullName} +${post.taggedUsers.size - 1}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = SocivaBlue
+              )
             }
           }
 
@@ -570,6 +599,17 @@ fun PostCard(
                 onReportClick()
               }
             )
+            val isTagged = post.taggedUsers.any { it.id == currentUser?.id }
+            if (isTagged && onRemoveTagClick != null) {
+              DropdownMenuItem(
+                text = { Text("Remove tag from this post") },
+                leadingIcon = { Icon(Icons.Outlined.LabelOff, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                onClick = {
+                  showMenu = false
+                  onRemoveTagClick()
+                }
+              )
+            }
             if (post.authorId == currentUser?.id) {
               DropdownMenuItem(
                 text = { Text("Delete Post", color = MaterialTheme.colorScheme.error) },

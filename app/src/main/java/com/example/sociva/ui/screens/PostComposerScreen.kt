@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -49,6 +50,7 @@ fun PostComposerScreen(
   onBack: () -> Unit
 ) {
   val currentUser by viewModel.currentUser.collectAsState()
+  val allUsers by viewModel.allUsers.collectAsState()
   val pendingUrisFromVm by viewModel.pendingPostUris.collectAsState()
   val uploadState by viewModel.uploadState.collectAsState()
   val context = LocalContext.current
@@ -56,6 +58,8 @@ fun PostComposerScreen(
   var postText by remember { mutableStateOf("") }
   var selectedAudience by remember { mutableStateOf(PostAudience.PUBLIC) }
   var selectedFeeling by remember { mutableStateOf<String?>(null) }
+  var taggedUsers by remember { mutableStateOf<List<User>>(emptyList()) }
+  var showTagPeopleDialog by remember { mutableStateOf(false) }
   var showAudienceDropdown by remember { mutableStateOf(false) }
   var showFeelingPicker by remember { mutableStateOf(false) }
   var isCreatingStory by remember { mutableStateOf(false) }
@@ -150,7 +154,8 @@ fun PostComposerScreen(
                   content = postText,
                   uris = localSelectedUris,
                   feeling = selectedFeeling,
-                  audience = selectedAudience
+                  audience = selectedAudience,
+                  taggedUserIds = taggedUsers.map { it.id }
                 )
               }
             },
@@ -217,12 +222,27 @@ fun PostComposerScreen(
         )
 
         Column {
-          Text(
-            text = currentUser?.fullName ?: "User",
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-          )
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              text = currentUser?.fullName ?: "User",
+              fontWeight = FontWeight.Bold,
+              style = MaterialTheme.typography.titleMedium,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            if (taggedUsers.isNotEmpty()) {
+              Text(
+                text = " with ",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                text = if (taggedUsers.size == 1) taggedUsers.first().fullName else "${taggedUsers.first().fullName} +${taggedUsers.size - 1}",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = SocivaBlue
+              )
+            }
+          }
 
           if (!isCreatingStory) {
             // Audience Selector Chip
@@ -312,6 +332,31 @@ fun PostComposerScreen(
               .clickable { selectedFeeling = null },
             tint = SocivaPurple
           )
+        }
+      }
+
+      // Tagged Users Chips Preview
+      if (taggedUsers.isNotEmpty()) {
+        LazyRow(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          items(taggedUsers) { taggedUser ->
+            InputChip(
+              selected = true,
+              onClick = {},
+              label = { Text(taggedUser.fullName, fontSize = 12.sp) },
+              trailingIcon = {
+                Icon(
+                  Icons.Default.Close,
+                  contentDescription = "Remove tag",
+                  modifier = Modifier
+                    .size(16.dp)
+                    .clickable { taggedUsers = taggedUsers.filter { it.id != taggedUser.id } }
+                )
+              }
+            )
+          }
         }
       }
 
@@ -422,8 +467,45 @@ fun PostComposerScreen(
         },
         onFeelingClick = {
           showFeelingPicker = true
+        },
+        onTagPeopleClick = {
+          showTagPeopleDialog = true
         }
       )
+
+      // Tag Friends / People Row
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .clip(RoundedCornerShape(12.dp))
+          .background(MaterialTheme.colorScheme.surfaceVariant)
+          .clickable { showTagPeopleDialog = true }
+          .padding(14.dp)
+          .testTag("composer_tag_people_row"),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          Icon(
+            imageVector = Icons.Default.PersonAdd,
+            contentDescription = null,
+            tint = Color(0xFF8B5CF6)
+          )
+          Text(
+            text = if (taggedUsers.isEmpty()) "Tag Friends / People" else "Tagged: ${taggedUsers.joinToString { it.fullName }}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+          )
+        }
+        Icon(
+          imageVector = Icons.Default.ChevronRight,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
 
       // Bottom Add Options: Feeling/Activity
       Row(
@@ -537,6 +619,155 @@ fun PostComposerScreen(
       }
     )
   }
+
+  // Tag People Dialog
+  if (showTagPeopleDialog) {
+    TagPeopleDialog(
+      allUsers = allUsers.filter { it.id != currentUser?.id },
+      currentTagged = taggedUsers,
+      onConfirm = { updated ->
+        taggedUsers = updated
+        showTagPeopleDialog = false
+      },
+      onDismiss = { showTagPeopleDialog = false }
+    )
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TagPeopleDialog(
+  allUsers: List<User>,
+  currentTagged: List<User>,
+  onConfirm: (List<User>) -> Unit,
+  onDismiss: () -> Unit
+) {
+  var searchQuery by remember { mutableStateOf("") }
+  var selectedList by remember { mutableStateOf(currentTagged) }
+
+  val filteredUsers = remember(searchQuery, allUsers) {
+    if (searchQuery.isBlank()) allUsers
+    else allUsers.filter {
+      it.fullName.contains(searchQuery, ignoreCase = true) ||
+        it.username.contains(searchQuery, ignoreCase = true)
+    }
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    modifier = Modifier.fillMaxWidth().heightIn(max = 550.dp),
+    title = {
+      Text(
+        text = "Tag Friends",
+        fontWeight = FontWeight.Bold,
+        style = MaterialTheme.typography.titleLarge
+      )
+    },
+    text = {
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        OutlinedTextField(
+          value = searchQuery,
+          onValueChange = { searchQuery = it },
+          placeholder = { Text("Search friends by name or @username...") },
+          leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+          shape = RoundedCornerShape(12.dp),
+          modifier = Modifier.fillMaxWidth().testTag("tag_search_field"),
+          singleLine = true
+        )
+
+        if (selectedList.isNotEmpty()) {
+          LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            items(selectedList) { user ->
+              InputChip(
+                selected = true,
+                onClick = { selectedList = selectedList.filter { it.id != user.id } },
+                label = { Text(user.fullName, fontSize = 12.sp) },
+                trailingIcon = {
+                  Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(14.dp))
+                }
+              )
+            }
+          }
+        }
+
+        Divider()
+
+        if (filteredUsers.isEmpty()) {
+          Box(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            Text("No users found", color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        } else {
+          LazyColumn(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+          ) {
+            items(filteredUsers, key = { it.id }) { user ->
+              val isSelected = selectedList.any { it.id == user.id }
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clip(RoundedCornerShape(8.dp))
+                  .clickable {
+                    selectedList = if (isSelected) {
+                      selectedList.filter { it.id != user.id }
+                    } else {
+                      selectedList + user
+                    }
+                  }
+                  .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                UserAvatar(
+                  avatarUrl = user.avatarUrl,
+                  name = user.fullName,
+                  size = 36.dp
+                )
+
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(user.fullName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                  Text("@${user.username}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                Checkbox(
+                  checked = isSelected,
+                  onCheckedChange = { checked ->
+                    selectedList = if (checked) {
+                      selectedList + user
+                    } else {
+                      selectedList.filter { it.id != user.id }
+                    }
+                  }
+                )
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { onConfirm(selectedList) },
+        colors = ButtonDefaults.buttonColors(containerColor = SocivaBlue)
+      ) {
+        Text("Done (${selectedList.size})", fontWeight = FontWeight.Bold)
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancel")
+      }
+    }
+  )
 }
 
 @Composable

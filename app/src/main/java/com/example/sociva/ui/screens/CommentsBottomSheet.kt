@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +54,7 @@ fun CommentsBottomSheet(
 ) {
   val comments by viewModel.getPostComments(postId).collectAsState(initial = emptyList())
   val currentUser by viewModel.currentUser.collectAsState()
+  val allUsers by viewModel.allUsers.collectAsState()
   var newCommentText by remember { mutableStateOf("") }
   var replyingToComment by remember { mutableStateOf<Comment?>(null) }
   val focusRequester = remember { FocusRequester() }
@@ -243,74 +245,138 @@ fun CommentsBottomSheet(
           }
         }
 
-        // Bottom Input Field
+        // Bottom Input Field with @Mention Support
+        val lastAtIndex = newCommentText.lastIndexOf('@')
+        val mentionQuery = if (lastAtIndex >= 0) {
+          val substring = newCommentText.substring(lastAtIndex + 1)
+          if (!substring.contains(' ') && substring.length <= 20) substring else null
+        } else null
+
+        val matchingUsers = remember(mentionQuery, allUsers) {
+          if (mentionQuery == null) emptyList()
+          else allUsers.filter {
+            it.username.contains(mentionQuery, ignoreCase = true) ||
+            it.fullName.contains(mentionQuery, ignoreCase = true)
+          }.take(5)
+        }
+
         Surface(
           tonalElevation = 6.dp,
           modifier = Modifier.fillMaxWidth()
         ) {
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            UserAvatar(
-              avatarUrl = currentUser?.avatarUrl,
-              name = currentUser?.fullName ?: "Me",
-              size = 36.dp
-            )
-
-            OutlinedTextField(
-              value = newCommentText,
-              onValueChange = { newCommentText = it },
-              placeholder = {
-                Text(
-                  if (replyingToComment != null) "Reply to @${replyingToComment?.authorName}..."
-                  else "Write a comment..."
-                )
-              },
-              shape = RoundedCornerShape(24.dp),
-              modifier = Modifier
-                .weight(1f)
-                .focusRequester(focusRequester)
-                .testTag("comment_input_field"),
-              maxLines = 3
-            )
-
-            IconButton(
-              onClick = {
-                val text = newCommentText.trim()
-                if (text.isNotBlank()) {
-                  val targetParent = replyingToComment
-                  if (targetParent != null) {
-                    val prefix = if (!text.startsWith("@")) "@${targetParent.authorName} " else ""
-                    val parentId = targetParent.parentCommentId ?: targetParent.id
-                    viewModel.addComment(postId, prefix + text, parentId)
-                    replyingToComment = null
-                  } else {
-                    viewModel.addComment(postId, text, null)
+          Column(modifier = Modifier.fillMaxWidth()) {
+            if (matchingUsers.isNotEmpty()) {
+              LazyRow(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                  .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                items(matchingUsers) { u ->
+                  Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 2.dp,
+                    modifier = Modifier.clickable {
+                      val beforeAt = newCommentText.substring(0, lastAtIndex)
+                      newCommentText = "$beforeAt@${u.username} "
+                    }
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                      UserAvatar(avatarUrl = u.avatarUrl, name = u.fullName, size = 20.dp)
+                      Text(u.fullName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                      Text("@${u.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                   }
-                  newCommentText = ""
                 }
-              },
-              enabled = newCommentText.isNotBlank(),
+              }
+            }
+
+            Row(
               modifier = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(
-                  if (newCommentText.isNotBlank()) SocivaBlue
-                  else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                )
-                .testTag("comment_submit_button")
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-              Icon(
-                imageVector = Icons.AutoMirrored.Filled.Send,
-                contentDescription = "Post Comment",
-                tint = if (newCommentText.isNotBlank()) Color.White
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(18.dp)
+              UserAvatar(
+                avatarUrl = currentUser?.avatarUrl,
+                name = currentUser?.fullName ?: "Me",
+                size = 36.dp
               )
+
+              OutlinedTextField(
+                value = newCommentText,
+                onValueChange = { newCommentText = it },
+                placeholder = {
+                  Text(
+                    if (replyingToComment != null) "Reply to @${replyingToComment?.authorName}..."
+                    else "Write a comment..."
+                  )
+                },
+                trailingIcon = {
+                  IconButton(
+                    onClick = {
+                      if (!newCommentText.endsWith("@")) {
+                        newCommentText = if (newCommentText.isEmpty() || newCommentText.endsWith(" ")) {
+                          "$newCommentText@"
+                        } else {
+                          "$newCommentText @"
+                        }
+                      }
+                    },
+                    modifier = Modifier.size(28.dp)
+                  ) {
+                    Text("@", fontWeight = FontWeight.ExtraBold, color = SocivaBlue, fontSize = 16.sp)
+                  }
+                },
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                  .weight(1f)
+                  .focusRequester(focusRequester)
+                  .testTag("comment_input_field"),
+                maxLines = 3
+              )
+
+              IconButton(
+                onClick = {
+                  val text = newCommentText.trim()
+                  if (text.isNotBlank()) {
+                    val targetParent = replyingToComment
+                    if (targetParent != null) {
+                      val prefix = if (!text.startsWith("@")) "@${targetParent.authorName} " else ""
+                      val parentId = targetParent.parentCommentId ?: targetParent.id
+                      viewModel.addComment(postId, prefix + text, parentId)
+                      replyingToComment = null
+                    } else {
+                      viewModel.addComment(postId, text, null)
+                    }
+                    newCommentText = ""
+                  }
+                },
+                enabled = newCommentText.isNotBlank(),
+                modifier = Modifier
+                  .size(42.dp)
+                  .clip(CircleShape)
+                  .background(
+                    if (newCommentText.isNotBlank()) SocivaBlue
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                  )
+                  .testTag("comment_submit_button")
+              ) {
+                Icon(
+                  imageVector = Icons.AutoMirrored.Filled.Send,
+                  contentDescription = "Post Comment",
+                  tint = if (newCommentText.isNotBlank()) Color.White
+                  else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                  modifier = Modifier.size(18.dp)
+                )
+              }
             }
           }
         }

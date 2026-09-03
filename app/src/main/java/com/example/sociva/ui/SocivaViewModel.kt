@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 enum class SocivaScreen {
   MAIN,
   PROFILE,
+  EDIT_PROFILE,
   MESSAGES,
   CHAT_DETAIL,
   CREATE_POST,
@@ -139,6 +140,18 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
 
   val friendRequests: StateFlow<List<FriendRequestItem>> = _currentUserId.flatMapLatest { uid ->
     repository.getFriendRequests(uid)
+  }.stateIn(
+    viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+  )
+
+  val incomingRelationshipRequests: StateFlow<List<RelationshipItem>> = _currentUserId.flatMapLatest { uid ->
+    repository.getIncomingRelationshipRequests(uid)
+  }.stateIn(
+    viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+  )
+
+  val sentRelationshipRequests: StateFlow<List<RelationshipItem>> = _currentUserId.flatMapLatest { uid ->
+    repository.getSentRelationshipRequests(uid)
   }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
@@ -329,10 +342,16 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   }
 
   // Actions
-  fun createPost(content: String, mediaUrls: List<String>, feeling: String?, audience: PostAudience) {
+  fun createPost(
+    content: String,
+    mediaUrls: List<String>,
+    feeling: String?,
+    audience: PostAudience,
+    taggedUserIds: List<String> = emptyList()
+  ) {
     val author = currentUser.value ?: return
     viewModelScope.launch {
-      repository.createPost(author, content, mediaUrls, feeling, audience)
+      repository.createPost(author, content, mediaUrls, feeling, audience, taggedUserIds)
       _activeScreen.value = SocivaScreen.MAIN
       showToast("Your post has been published to Sociva! 🎉")
     }
@@ -509,7 +528,8 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     uris: List<android.net.Uri>,
     additionalUrls: List<String> = emptyList(),
     feeling: String?,
-    audience: PostAudience
+    audience: PostAudience,
+    taggedUserIds: List<String> = emptyList()
   ) {
     val user = currentUser.value ?: return
     viewModelScope.launch {
@@ -556,7 +576,8 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
         content = content,
         mediaUrls = uploadedUrls,
         feeling = feeling,
-        audience = audience
+        audience = audience,
+        taggedUserIds = taggedUserIds
       )
 
       _uploadState.value = UploadState.Success(uploadedUrls.firstOrNull() ?: "", MediaType.POST_MEDIA)
@@ -728,6 +749,82 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch {
       repository.updateUserProfile("user_me", fullName, bio, work, education, location)
       showToast("Profile updated successfully! ✨")
+    }
+  }
+
+  fun updateFullUserProfile(updated: User) {
+    viewModelScope.launch {
+      repository.updateFullUserProfile(updated)
+      showToast("Profile updated successfully! ✨")
+    }
+  }
+
+  // --- Relationship Management ---
+  fun sendRelationshipRequest(
+    targetUserId: String,
+    relationshipType: String,
+    customText: String? = null,
+    privacy: String = "Public"
+  ) {
+    val user = currentUser.value ?: return
+    viewModelScope.launch {
+      repository.sendRelationshipRequest(user, targetUserId, relationshipType, customText, privacy)
+        .onSuccess {
+          showToast("Relationship request sent")
+        }
+        .onFailure {
+          showToast(it.message ?: "Failed to send relationship request")
+        }
+    }
+  }
+
+  fun acceptRelationshipRequest(requestId: String) {
+    viewModelScope.launch {
+      repository.acceptRelationshipRequest(requestId, _currentUserId.value)
+        .onSuccess {
+          showToast("Relationship accepted! 💕")
+        }
+        .onFailure {
+          showToast(it.message ?: "Failed to accept relationship")
+        }
+    }
+  }
+
+  fun declineRelationshipRequest(requestId: String) {
+    viewModelScope.launch {
+      repository.declineRelationshipRequest(requestId, _currentUserId.value)
+        .onSuccess {
+          showToast("Relationship request declined")
+        }
+        .onFailure {
+          showToast(it.message ?: "Failed to decline request")
+        }
+    }
+  }
+
+  fun cancelRelationshipRequest(requestId: String) {
+    viewModelScope.launch {
+      repository.cancelRelationshipRequest(requestId, _currentUserId.value)
+        .onSuccess {
+          showToast("Relationship request cancelled")
+        }
+    }
+  }
+
+  fun removeRelationship(newStatus: String = "Single") {
+    viewModelScope.launch {
+      repository.removeOrResetRelationship(_currentUserId.value, newStatus)
+      showToast("Relationship status updated")
+    }
+  }
+
+  // --- Post Tagging Actions ---
+  fun getTaggedPostsByUser(userId: String): Flow<List<Post>> = repository.getTaggedPostsByUser(userId)
+
+  fun removePostTag(postId: String) {
+    viewModelScope.launch {
+      repository.removePostTag(postId, _currentUserId.value)
+      showToast("You were removed from this post")
     }
   }
 

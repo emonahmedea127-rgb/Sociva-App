@@ -27,7 +27,49 @@ data class UserEntity(
   val isFriend: Boolean = false,
   val isFollowing: Boolean = false,
   val profilePictureUpdatedAt: Long = 0L,
-  val coverPhotoUpdatedAt: Long = 0L
+  val coverPhotoUpdatedAt: Long = 0L,
+  // Section A: Basic Information
+  val firstName: String = "",
+  val lastName: String = "",
+  val pronouns: String = "",
+  val nickname: String = "",
+  val otherNames: String = "",
+  // Section B: Personal Information
+  val dateOfBirth: String = "",
+  val gender: String = "",
+  val interestedIn: String = "",
+  val hometown: String = "",
+  val currentCity: String = "",
+  val country: String = "",
+  // Work Information
+  val workplace: String = "",
+  val workPosition: String = "",
+  val workStartDate: String = "",
+  val workEndDate: String = "",
+  // Education Information
+  val school: String = "",
+  val college: String = "",
+  val university: String = "",
+  val degree: String = "",
+  val fieldOfStudy: String = "",
+  val graduationYear: String = "",
+  // Contact Information
+  val website: String = "",
+  val email: String = "",
+  val phone: String = "",
+  // Relationship Status & Partner
+  val relationshipStatus: String = "Single",
+  val relationshipPartnerId: String? = null,
+  val relationshipPartnerName: String? = null,
+  val customRelationshipText: String? = null,
+  // Privacy Controls
+  val birthdayPrivacy: String = "Public",
+  val currentCityPrivacy: String = "Public",
+  val hometownPrivacy: String = "Public",
+  val relationshipPrivacy: String = "Public",
+  val emailPrivacy: String = "Friends",
+  val taggingPermission: String = "ALLOW_ANYONE",
+  val reviewTagsBeforeAppearing: Boolean = false
 )
 
 @Entity(tableName = "posts")
@@ -205,7 +247,9 @@ data class NotificationEntity(
   val timestamp: Long,
   val isRead: Boolean = false,
   val targetPostId: String? = null,
-  val recipientId: String = "user_me"
+  val recipientId: String = "user_me",
+  val actionData: String? = null, // e.g. relationshipId or target user id
+  val senderId: String = ""
 )
 
 @Entity(
@@ -303,3 +347,55 @@ data class ReportEntity(
   val timestamp: Long,
   val status: String = "Pending"
 )
+
+@Entity(
+  tableName = "relationships",
+  indices = [
+    Index(value = ["requesterId"]),
+    Index(value = ["receiverId"]),
+    Index(value = ["status"])
+  ]
+)
+data class RelationshipEntity(
+  @PrimaryKey val id: String,
+  val requesterId: String,
+  val receiverId: String,
+  val relationshipType: String, // "In a relationship", "Engaged", "Married", "In an open relationship", "It's complicated", "Separated", "Divorced", "Widowed", "Custom"
+  val customText: String? = null,
+  val status: String, // "pending", "accepted", "declined", "cancelled"
+  val privacy: String = "Public", // "Public", "Friends", "Only me"
+  val createdAt: Long = System.currentTimeMillis(),
+  val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+  tableName = "post_tags",
+  indices = [
+    Index(value = ["postId"]),
+    Index(value = ["taggedUserId"]),
+    Index(value = ["status"])
+  ]
+)
+data class PostTagEntity(
+  @PrimaryKey val id: String,
+  val postId: String,
+  val taggedUserId: String,
+  val taggedByUserId: String,
+  val status: String = "approved", // "pending", "approved", "removed"
+  val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+  tableName = "comment_mentions",
+  indices = [
+    Index(value = ["commentId"]),
+    Index(value = ["mentionedUserId"])
+  ]
+)
+data class CommentMentionEntity(
+  @PrimaryKey val id: String,
+  val commentId: String,
+  val mentionedUserId: String,
+  val createdAt: Long = System.currentTimeMillis()
+)
+

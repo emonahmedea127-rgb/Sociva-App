@@ -37,6 +37,7 @@ import coil.request.ImageRequest
 import com.example.sociva.data.model.FriendStatus
 import com.example.sociva.data.model.User
 import com.example.sociva.data.service.UploadState
+import com.example.sociva.ui.SocivaScreen
 import com.example.sociva.ui.SocivaViewModel
 import com.example.sociva.ui.components.*
 import com.example.ui.theme.SocivaBlue
@@ -54,10 +55,11 @@ fun ProfileScreen(
   val user by viewModel.getUser(userId).collectAsState(initial = null)
   val currentUser by viewModel.currentUser.collectAsState()
   val userPosts by viewModel.getPostsByUser(userId).collectAsState(initial = emptyList())
+  val taggedPosts by viewModel.getTaggedPostsByUser(userId).collectAsState(initial = emptyList())
+  val incomingRelationshipRequests by viewModel.incomingRelationshipRequests.collectAsState()
   val uploadState by viewModel.uploadState.collectAsState()
 
-  var showEditDialog by remember { mutableStateOf(false) }
-  var selectedTab by remember { mutableStateOf(0) } // 0: Posts, 1: About, 2: Photos
+  var selectedTab by remember { mutableStateOf(0) } // 0: Posts, 1: About, 2: Photos, 3: Tagged
 
   // Photo Management States
   var showAvatarActionSheet by remember { mutableStateOf(false) }
@@ -295,11 +297,40 @@ fun ProfileScreen(
             }
           }
 
-          Text(
-            text = "@${user?.username ?: ""}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Text(
+              text = "@${user?.username ?: ""}",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!user?.pronouns.isNullOrBlank()) {
+              Text(
+                text = "(${user?.pronouns})",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium
+              )
+            }
+            if (!user?.nickname.isNullOrBlank()) {
+              Text(
+                text = "• \"${user?.nickname}\"",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+          }
+
+          if (!user?.otherNames.isNullOrBlank()) {
+            Text(
+              text = "Also known as: ${user?.otherNames}",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
 
           if (!user?.bio.isNullOrBlank()) {
             Text(
@@ -307,6 +338,96 @@ fun ProfileScreen(
               style = MaterialTheme.typography.bodyMedium,
               modifier = Modifier.padding(vertical = 4.dp)
             )
+          }
+
+          // Relationship Status Badge
+          val canSeeRelationship = isMyProfile || when (user?.relationshipPrivacy) {
+            "Public" -> true
+            "Friends" -> friendStatus == FriendStatus.FRIENDS
+            "Only me" -> false
+            else -> true
+          }
+          if (canSeeRelationship && !user?.relationshipStatus.isNullOrBlank()) {
+            Surface(
+              shape = RoundedCornerShape(12.dp),
+              color = Color(0xFFFDF2F8),
+              modifier = Modifier.padding(vertical = 2.dp)
+            ) {
+              Row(
+                modifier = Modifier
+                  .clickable(enabled = !user?.relationshipPartnerId.isNullOrBlank()) {
+                    user?.relationshipPartnerId?.let { partnerId ->
+                      viewModel.navigateToProfile(partnerId)
+                    }
+                  }
+                  .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+              ) {
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFEC4899), modifier = Modifier.size(16.dp))
+                Text(
+                  text = buildString {
+                    append(user?.relationshipStatus)
+                    if (!user?.relationshipPartnerName.isNullOrBlank()) {
+                      append(" with ")
+                      append(user?.relationshipPartnerName)
+                    }
+                  },
+                  style = MaterialTheme.typography.bodySmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = Color(0xFFBE185D)
+                )
+              }
+            }
+          }
+
+          // Incoming Relationship Request Banner (For current user)
+          if (isMyProfile && incomingRelationshipRequests.isNotEmpty()) {
+            Column(
+              modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+              verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+              incomingRelationshipRequests.forEach { req ->
+                Card(
+                  colors = CardDefaults.cardColors(containerColor = Color(0xFFFCE7F3)),
+                  shape = RoundedCornerShape(12.dp),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                      Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFEC4899), modifier = Modifier.size(18.dp))
+                      Text(
+                        text = "Relationship Request",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Color(0xFFBE185D)
+                      )
+                    }
+                    Text(
+                      text = "${req.requesterName} requested to list you as their partner (${req.relationshipType}).",
+                      style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                      Button(
+                        onClick = { viewModel.acceptRelationshipRequest(req.id) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEC4899)),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                      ) {
+                        Text("Accept", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                      }
+                      OutlinedButton(
+                        onClick = { viewModel.declineRelationshipRequest(req.id) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                      ) {
+                        Text("Decline", fontSize = 12.sp)
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
 
           // Stats Counter Row: Followers, Following, Friends, Posts
@@ -333,7 +454,7 @@ fun ProfileScreen(
               horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
               Button(
-                onClick = { showEditDialog = true },
+                onClick = { viewModel.navigateTo(SocivaScreen.EDIT_PROFILE) },
                 modifier = Modifier
                   .fillMaxWidth()
                   .testTag("edit_profile_button"),
@@ -496,7 +617,7 @@ fun ProfileScreen(
         }
       }
 
-      // 3. Tab Row: Posts, About, Photos
+      // 3. Tab Row: Posts, About, Photos, Tagged
       item {
         TabRow(
           selectedTabIndex = selectedTab,
@@ -518,6 +639,11 @@ fun ProfileScreen(
             selected = selectedTab == 2,
             onClick = { selectedTab = 2 },
             text = { Text("Photos", fontWeight = FontWeight.Bold) }
+          )
+          Tab(
+            selected = selectedTab == 3,
+            onClick = { selectedTab = 3 },
+            text = { Text("Tagged (${taggedPosts.size})", fontWeight = FontWeight.Bold) }
           )
         }
       }
@@ -553,55 +679,196 @@ fun ProfileScreen(
                 onDeleteClick = { viewModel.deletePost(post.id) },
                 onReportClick = {
                   viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
-                }
+                },
+                onRemoveTagClick = { viewModel.removePostTag(post.id) }
               )
             }
           }
         }
 
         1 -> {
-          // About Section Details
+          // Comprehensive Facebook-Style About Section with Privacy Enforcement
+          val isFriend = friendStatus == FriendStatus.FRIENDS
+          fun canView(privacy: String): Boolean =
+            isMyProfile || when (privacy) {
+              "Public" -> true
+              "Friends" -> isFriend
+              "Only me" -> false
+              else -> true
+            }
+
           item {
-            Card(
+            Column(
               modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp),
-              shape = RoundedCornerShape(16.dp),
-              colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+              verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-              Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+              // Section A: Work & Education
+              Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
               ) {
-                Text(
-                  text = "About",
-                  style = MaterialTheme.typography.titleMedium,
-                  fontWeight = FontWeight.Bold
-                )
+                Column(
+                  modifier = Modifier.padding(16.dp),
+                  verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                  Text("Work & Education", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                AboutInfoRow(
-                  icon = Icons.Default.Work,
-                  title = "Works at",
-                  value = user?.work ?: "Sociva Studio"
-                )
+                  val displayWork = user?.workplace?.ifBlank { null } ?: user?.work
+                  if (!displayWork.isNullOrBlank()) {
+                    val workDesc = buildString {
+                      if (!user?.workPosition.isNullOrBlank()) append("${user?.workPosition} at ")
+                      append(displayWork)
+                      if (!user?.workStartDate.isNullOrBlank()) {
+                        append(" (${user?.workStartDate} - ${user?.workEndDate?.ifBlank { "Present" } ?: "Present"})")
+                      }
+                    }
+                    AboutInfoRow(icon = Icons.Default.Work, title = "Work", value = workDesc)
+                  }
 
-                AboutInfoRow(
-                  icon = Icons.Default.School,
-                  title = "Studied at",
-                  value = user?.education ?: "University of California, Berkeley"
-                )
+                  val college = user?.college?.ifBlank { null } ?: user?.university?.ifBlank { null } ?: user?.education
+                  if (!college.isNullOrBlank()) {
+                    val collegeDesc = buildString {
+                      if (!user?.degree.isNullOrBlank()) append("${user?.degree}, ")
+                      if (!user?.fieldOfStudy.isNullOrBlank()) append("${user?.fieldOfStudy} at ")
+                      append(college)
+                      if (!user?.graduationYear.isNullOrBlank()) append(" (Class of ${user?.graduationYear})")
+                    }
+                    AboutInfoRow(icon = Icons.Default.School, title = "College / University", value = collegeDesc)
+                  }
 
-                AboutInfoRow(
-                  icon = Icons.Default.LocationOn,
-                  title = "Lives in",
-                  value = user?.location ?: "San Francisco, CA"
-                )
+                  if (!user?.school.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.School, title = "School", value = user?.school ?: "")
+                  }
 
-                AboutInfoRow(
-                  icon = Icons.Default.CalendarToday,
-                  title = "Joined Sociva",
-                  value = user?.joinedDate ?: "March 2024"
-                )
+                  if (displayWork.isNullOrBlank() && college.isNullOrBlank() && user?.school.isNullOrBlank()) {
+                    Text("No work or education places to show", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  }
+                }
+              }
+
+              // Section B: Places Lived (Privacy Checked)
+              if (canView(user?.currentCityPrivacy ?: "Public")) {
+                Card(
+                  modifier = Modifier.fillMaxWidth(),
+                  shape = RoundedCornerShape(16.dp),
+                  colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                  Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                  ) {
+                    Text("Places Lived", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    val currentCity = user?.currentCity?.ifBlank { null } ?: user?.location
+                    if (!currentCity.isNullOrBlank()) {
+                      AboutInfoRow(icon = Icons.Default.Home, title = "Lives in", value = currentCity)
+                    }
+
+                    if (!user?.hometown.isNullOrBlank()) {
+                      AboutInfoRow(icon = Icons.Default.LocationOn, title = "From (Hometown)", value = user?.hometown ?: "")
+                    }
+
+                    if (!user?.country.isNullOrBlank()) {
+                      AboutInfoRow(icon = Icons.Default.Public, title = "Country", value = user?.country ?: "")
+                    }
+
+                    if (currentCity.isNullOrBlank() && user?.hometown.isNullOrBlank() && user?.country.isNullOrBlank()) {
+                      Text("No places to show", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                  }
+                }
+              }
+
+              // Section C: Relationship Status (Privacy Checked)
+              if (canView(user?.relationshipPrivacy ?: "Public")) {
+                Card(
+                  modifier = Modifier.fillMaxWidth(),
+                  shape = RoundedCornerShape(16.dp),
+                  colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                  Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                  ) {
+                    Text("Relationship", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    val relValue = buildString {
+                      append(user?.relationshipStatus ?: "Single")
+                      if (!user?.relationshipPartnerName.isNullOrBlank()) {
+                        append(" with ${user?.relationshipPartnerName}")
+                      }
+                      if (!user?.customRelationshipText.isNullOrBlank()) {
+                        append(" • ${user?.customRelationshipText}")
+                      }
+                    }
+                    AboutInfoRow(icon = Icons.Default.Favorite, title = "Status", value = relValue)
+                  }
+                }
+              }
+
+              // Section D: Basic & Demographic Info
+              Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+              ) {
+                Column(
+                  modifier = Modifier.padding(16.dp),
+                  verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                  Text("Basic Info", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                  if (canView(user?.birthdayPrivacy ?: "Public") && !user?.dateOfBirth.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.Cake, title = "Birthdate", value = user?.dateOfBirth ?: "")
+                  }
+
+                  if (!user?.gender.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.Person, title = "Gender", value = user?.gender ?: "")
+                  }
+
+                  if (!user?.interestedIn.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.FavoriteBorder, title = "Interested in", value = user?.interestedIn ?: "")
+                  }
+
+                  if (!user?.pronouns.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.Badge, title = "Pronouns", value = user?.pronouns ?: "")
+                  }
+
+                  AboutInfoRow(
+                    icon = Icons.Default.CalendarToday,
+                    title = "Joined Sociva",
+                    value = user?.joinedDate ?: "March 2024"
+                  )
+                }
+              }
+
+              // Section E: Contact Info
+              Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+              ) {
+                Column(
+                  modifier = Modifier.padding(16.dp),
+                  verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                  Text("Contact Info", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                  if (canView(user?.emailPrivacy ?: "Public") && !user?.email.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.Email, title = "Email", value = user?.email ?: "")
+                  }
+
+                  if (!user?.phone.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.Phone, title = "Phone", value = user?.phone ?: "")
+                  }
+
+                  if (!user?.website.isNullOrBlank()) {
+                    AboutInfoRow(icon = Icons.Default.Link, title = "Website", value = user?.website ?: "")
+                  }
+                }
               }
             }
           }
@@ -648,20 +915,56 @@ fun ProfileScreen(
             }
           }
         }
+
+        3 -> {
+          // Tagged Posts
+          if (taggedPosts.isEmpty()) {
+            item {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(32.dp),
+                contentAlignment = Alignment.Center
+              ) {
+                Column(
+                  horizontalAlignment = Alignment.CenterHorizontally,
+                  verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                  Icon(
+                    Icons.Default.Label,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                  )
+                  Text(
+                    text = "No tagged posts.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+            }
+          } else {
+            items(taggedPosts, key = { it.id }) { post ->
+              PostCard(
+                post = post,
+                currentUser = currentUser,
+                onReaction = { reaction -> viewModel.setReaction(post.id, reaction) },
+                onCommentClick = { viewModel.openComments(post.id) },
+                onShareClick = { viewModel.sharePost(post.id) },
+                onSaveClick = { viewModel.toggleSavePost(post.id) },
+                onAuthorClick = { viewModel.navigateToProfile(post.authorId) },
+                onDeleteClick = { viewModel.deletePost(post.id) },
+                onReportClick = {
+                  viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
+                },
+                onRemoveTagClick = { viewModel.removePostTag(post.id) }
+              )
+            }
+          }
+        }
       }
     }
-  }
-
-  // Edit Profile Dialog
-  if (showEditDialog && user != null) {
-    EditProfileDialog(
-      user = user!!,
-      onDismiss = { showEditDialog = false },
-      onSave = { name, bio, work, education, location ->
-        viewModel.updateUserProfile(name, bio, work, education, location)
-        showEditDialog = false
-      }
-    )
   }
 
   // 1. Profile Picture Action Sheet
@@ -890,72 +1193,4 @@ fun AboutInfoRow(
   }
 }
 
-@Composable
-fun EditProfileDialog(
-  user: User,
-  onDismiss: () -> Unit,
-  onSave: (name: String, bio: String, work: String, education: String, location: String) -> Unit
-) {
-  var name by remember { mutableStateOf(user.fullName) }
-  var bio by remember { mutableStateOf(user.bio) }
-  var work by remember { mutableStateOf(user.work) }
-  var education by remember { mutableStateOf(user.education) }
-  var location by remember { mutableStateOf(user.location) }
 
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("Edit Profile", fontWeight = FontWeight.Bold) },
-    text = {
-      Column(
-        modifier = Modifier
-          .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-      ) {
-        OutlinedTextField(
-          value = name,
-          onValueChange = { name = it },
-          label = { Text("Full Name") },
-          modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-          value = bio,
-          onValueChange = { bio = it },
-          label = { Text("Bio") },
-          modifier = Modifier.fillMaxWidth(),
-          maxLines = 3
-        )
-        OutlinedTextField(
-          value = work,
-          onValueChange = { work = it },
-          label = { Text("Work") },
-          modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-          value = education,
-          onValueChange = { education = it },
-          label = { Text("Education") },
-          modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-          value = location,
-          onValueChange = { location = it },
-          label = { Text("Location") },
-          modifier = Modifier.fillMaxWidth()
-        )
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = { onSave(name, bio, work, education, location) },
-        colors = ButtonDefaults.buttonColors(containerColor = SocivaBlue)
-      ) {
-        Text("Save Changes")
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) {
-        Text("Cancel")
-      }
-    }
-  )
-}

@@ -68,6 +68,82 @@ class SocivaRepository(
 
   fun getUser(id: String): Flow<User?> = dao.getUserById(id).map { it?.toDomain() }
 
+  suspend fun updateFullUserProfile(updated: User) {
+    val existing = dao.getUserById(updated.id).first() ?: return
+    val fullName = if (updated.firstName.isNotBlank() || updated.lastName.isNotBlank()) {
+      "${updated.firstName} ${updated.lastName}".trim()
+    } else {
+      updated.fullName
+    }
+    val work = if (updated.workPosition.isNotBlank() && updated.workplace.isNotBlank()) {
+      "${updated.workPosition} at ${updated.workplace}"
+    } else if (updated.workPosition.isNotBlank()) {
+      updated.workPosition
+    } else if (updated.workplace.isNotBlank()) {
+      updated.workplace
+    } else {
+      updated.work
+    }
+    val education = if (updated.degree.isNotBlank() && updated.university.isNotBlank()) {
+      "${updated.degree} - ${updated.university}"
+    } else if (updated.university.isNotBlank()) {
+      updated.university
+    } else if (updated.school.isNotBlank()) {
+      updated.school
+    } else {
+      updated.education
+    }
+    val location = if (updated.currentCity.isNotBlank()) {
+      updated.currentCity
+    } else if (updated.hometown.isNotBlank()) {
+      updated.hometown
+    } else {
+      updated.location
+    }
+
+    dao.updateUser(
+      existing.copy(
+        fullName = fullName,
+        firstName = updated.firstName,
+        lastName = updated.lastName,
+        username = updated.username.ifBlank { existing.username },
+        bio = updated.bio,
+        pronouns = updated.pronouns,
+        nickname = updated.nickname,
+        otherNames = updated.otherNames,
+        dateOfBirth = updated.dateOfBirth,
+        gender = updated.gender,
+        interestedIn = updated.interestedIn,
+        hometown = updated.hometown,
+        currentCity = updated.currentCity,
+        country = updated.country,
+        work = work,
+        workplace = updated.workplace,
+        workPosition = updated.workPosition,
+        workStartDate = updated.workStartDate,
+        workEndDate = updated.workEndDate,
+        education = education,
+        school = updated.school,
+        college = updated.college,
+        university = updated.university,
+        degree = updated.degree,
+        fieldOfStudy = updated.fieldOfStudy,
+        graduationYear = updated.graduationYear,
+        website = updated.website,
+        email = updated.email,
+        phone = updated.phone,
+        location = location,
+        birthdayPrivacy = updated.birthdayPrivacy,
+        currentCityPrivacy = updated.currentCityPrivacy,
+        hometownPrivacy = updated.hometownPrivacy,
+        relationshipPrivacy = updated.relationshipPrivacy,
+        emailPrivacy = updated.emailPrivacy,
+        taggingPermission = updated.taggingPermission,
+        reviewTagsBeforeAppearing = updated.reviewTagsBeforeAppearing
+      )
+    )
+  }
+
   suspend fun updateUserProfile(
     userId: String,
     fullName: String,
@@ -84,6 +160,242 @@ class SocivaRepository(
         work = work,
         education = education,
         location = location
+      )
+    )
+  }
+
+  // --- Relationships ---
+  fun getIncomingRelationshipRequests(userId: String): Flow<List<RelationshipItem>> =
+    dao.getIncomingRelationshipRequests(userId).map { list ->
+      val usersMap = dao.getAllUsers().first().associateBy { it.id }
+      list.map { rel ->
+        val reqUser = usersMap[rel.requesterId]
+        val recUser = usersMap[rel.receiverId]
+        RelationshipItem(
+          id = rel.id,
+          requesterId = rel.requesterId,
+          receiverId = rel.receiverId,
+          relationshipType = rel.relationshipType,
+          customText = rel.customText,
+          status = rel.status,
+          privacy = rel.privacy,
+          requesterName = reqUser?.fullName ?: "Someone",
+          requesterAvatar = reqUser?.avatarUrl ?: "",
+          receiverName = recUser?.fullName ?: "Someone",
+          receiverAvatar = recUser?.avatarUrl ?: "",
+          createdAt = rel.createdAt,
+          updatedAt = rel.updatedAt
+        )
+      }
+    }
+
+  fun getSentRelationshipRequests(userId: String): Flow<List<RelationshipItem>> =
+    dao.getSentRelationshipRequests(userId).map { list ->
+      val usersMap = dao.getAllUsers().first().associateBy { it.id }
+      list.map { rel ->
+        val reqUser = usersMap[rel.requesterId]
+        val recUser = usersMap[rel.receiverId]
+        RelationshipItem(
+          id = rel.id,
+          requesterId = rel.requesterId,
+          receiverId = rel.receiverId,
+          relationshipType = rel.relationshipType,
+          customText = rel.customText,
+          status = rel.status,
+          privacy = rel.privacy,
+          requesterName = reqUser?.fullName ?: "Someone",
+          requesterAvatar = reqUser?.avatarUrl ?: "",
+          receiverName = recUser?.fullName ?: "Someone",
+          receiverAvatar = recUser?.avatarUrl ?: "",
+          createdAt = rel.createdAt,
+          updatedAt = rel.updatedAt
+        )
+      }
+    }
+
+  suspend fun sendRelationshipRequest(
+    requester: User,
+    targetUserId: String,
+    relationshipType: String,
+    customText: String? = null,
+    privacy: String = "Public"
+  ): Result<String> {
+    if (requester.id == targetUserId) {
+      return Result.failure(IllegalArgumentException("Cannot form a relationship with yourself"))
+    }
+    val targetUser = dao.getUserById(targetUserId).first()
+      ?: return Result.failure(NoSuchElementException("Target user not found"))
+
+    // Remove any previous pending requests between them
+    dao.deleteRelationshipsBetween(requester.id, targetUserId)
+
+    val relId = "rel_" + UUID.randomUUID().toString().take(8)
+    val relationship = RelationshipEntity(
+      id = relId,
+      requesterId = requester.id,
+      receiverId = targetUserId,
+      relationshipType = relationshipType,
+      customText = customText,
+      status = "pending",
+      privacy = privacy
+    )
+    dao.insertRelationship(relationship)
+
+    // Notify target user
+    dao.insertNotification(
+      NotificationEntity(
+        id = "notif_" + UUID.randomUUID().toString().take(8),
+        type = NotificationType.RELATIONSHIP_REQUEST.name,
+        actorName = requester.fullName,
+        actorAvatar = requester.avatarUrl,
+        isActorVerified = requester.isVerified,
+        messageSnippet = "${requester.fullName} wants to list you as their partner ($relationshipType).",
+        timestamp = System.currentTimeMillis(),
+        isRead = false,
+        recipientId = targetUserId,
+        actionData = relId,
+        senderId = requester.id
+      )
+    )
+
+    return Result.success(relId)
+  }
+
+  suspend fun acceptRelationshipRequest(relationshipId: String, currentUserId: String): Result<Unit> {
+    val rel = dao.getRelationshipById(relationshipId)
+      ?: return Result.failure(NoSuchElementException("Relationship request not found"))
+    if (rel.receiverId != currentUserId) {
+      return Result.failure(SecurityException("Unauthorized to accept this relationship request"))
+    }
+
+    val requester = dao.getUserById(rel.requesterId).first() ?: return Result.failure(NoSuchElementException("Requester not found"))
+    val receiver = dao.getUserById(rel.receiverId).first() ?: return Result.failure(NoSuchElementException("Receiver not found"))
+
+    // Update relationship status to accepted
+    val updatedRel = rel.copy(status = "accepted", updatedAt = System.currentTimeMillis())
+    dao.updateRelationship(updatedRel)
+
+    // Clear any previous relationships for both users
+    requester.relationshipPartnerId?.let { prevPartnerId ->
+      if (prevPartnerId != receiver.id) {
+        dao.updateUserRelationship(prevPartnerId, "Single", null, null)
+      }
+    }
+    receiver.relationshipPartnerId?.let { prevPartnerId ->
+      if (prevPartnerId != requester.id) {
+        dao.updateUserRelationship(prevPartnerId, "Single", null, null)
+      }
+    }
+
+    // Update both user profiles with the accepted relationship
+    dao.updateUser(
+      requester.copy(
+        relationshipStatus = rel.relationshipType,
+        relationshipPartnerId = receiver.id,
+        relationshipPartnerName = receiver.fullName,
+        customRelationshipText = rel.customText,
+        relationshipPrivacy = rel.privacy
+      )
+    )
+    dao.updateUser(
+      receiver.copy(
+        relationshipStatus = rel.relationshipType,
+        relationshipPartnerId = requester.id,
+        relationshipPartnerName = requester.fullName,
+        customRelationshipText = rel.customText,
+        relationshipPrivacy = rel.privacy
+      )
+    )
+
+    // Notify requester that the request was accepted
+    dao.insertNotification(
+      NotificationEntity(
+        id = "notif_" + UUID.randomUUID().toString().take(8),
+        type = NotificationType.RELATIONSHIP_ACCEPTED.name,
+        actorName = receiver.fullName,
+        actorAvatar = receiver.avatarUrl,
+        isActorVerified = receiver.isVerified,
+        messageSnippet = "${receiver.fullName} accepted your relationship request (${rel.relationshipType}).",
+        timestamp = System.currentTimeMillis(),
+        isRead = false,
+        recipientId = requester.id,
+        actionData = rel.id,
+        senderId = receiver.id
+      )
+    )
+
+    return Result.success(Unit)
+  }
+
+  suspend fun declineRelationshipRequest(relationshipId: String, currentUserId: String): Result<Unit> {
+    val rel = dao.getRelationshipById(relationshipId)
+      ?: return Result.failure(NoSuchElementException("Relationship request not found"))
+    if (rel.receiverId != currentUserId) {
+      return Result.failure(SecurityException("Unauthorized to decline this relationship request"))
+    }
+
+    val receiver = dao.getUserById(rel.receiverId).first()
+    dao.deleteRelationship(relationshipId)
+
+    // Notify requester
+    if (receiver != null) {
+      dao.insertNotification(
+        NotificationEntity(
+          id = "notif_" + UUID.randomUUID().toString().take(8),
+          type = NotificationType.RELATIONSHIP_DECLINED.name,
+          actorName = receiver.fullName,
+          actorAvatar = receiver.avatarUrl,
+          isActorVerified = receiver.isVerified,
+          messageSnippet = "${receiver.fullName} declined your relationship request.",
+          timestamp = System.currentTimeMillis(),
+          isRead = false,
+          recipientId = rel.requesterId,
+          senderId = receiver.id
+        )
+      )
+    }
+
+    return Result.success(Unit)
+  }
+
+  suspend fun cancelRelationshipRequest(relationshipId: String, currentUserId: String): Result<Unit> {
+    val rel = dao.getRelationshipById(relationshipId)
+      ?: return Result.failure(NoSuchElementException("Relationship request not found"))
+    if (rel.requesterId != currentUserId && rel.receiverId != currentUserId) {
+      return Result.failure(SecurityException("Unauthorized to cancel this request"))
+    }
+    dao.deleteRelationship(relationshipId)
+    return Result.success(Unit)
+  }
+
+  suspend fun removeOrResetRelationship(userId: String, newStatus: String = "Single") {
+    val user = dao.getUserById(userId).first() ?: return
+    val partnerId = user.relationshipPartnerId
+
+    // Remove active relationship records
+    if (partnerId != null) {
+      dao.deleteRelationshipsBetween(userId, partnerId)
+      // Reset partner's relationship to Single
+      val partner = dao.getUserById(partnerId).first()
+      if (partner != null && partner.relationshipPartnerId == userId) {
+        dao.updateUser(
+          partner.copy(
+            relationshipStatus = "Single",
+            relationshipPartnerId = null,
+            relationshipPartnerName = null,
+            customRelationshipText = null
+          )
+        )
+      }
+    }
+
+    // Reset user's relationship
+    dao.updateUser(
+      user.copy(
+        relationshipStatus = newStatus,
+        relationshipPartnerId = null,
+        relationshipPartnerName = null,
+        customRelationshipText = null
       )
     )
   }
@@ -216,16 +528,33 @@ class SocivaRepository(
   }
 
   // --- Posts ---
+  private suspend fun mapPostEntitiesToDomain(entities: List<PostEntity>): List<Post> {
+    val allUsersMap = dao.getAllUsers().first().associateBy { it.id }
+    return entities.map { postEntity ->
+      val tags = dao.getPostTags(postEntity.id)
+      val taggedUsers = tags.mapNotNull { tag ->
+        allUsersMap[tag.taggedUserId]?.let { u ->
+          TaggedUser(id = u.id, fullName = u.fullName, username = u.username, avatarUrl = u.avatarUrl)
+        }
+      }
+      postEntity.toDomain(taggedUsers = taggedUsers)
+    }
+  }
+
   val allPosts: Flow<List<Post>> = dao.getAllPosts().map { list ->
-    list.map { it.toDomain() }
+    mapPostEntitiesToDomain(list)
   }
 
   val savedPosts: Flow<List<Post>> = dao.getSavedPosts().map { list ->
-    list.map { it.toDomain() }
+    mapPostEntitiesToDomain(list)
   }
 
   fun getPostsByUser(userId: String): Flow<List<Post>> = dao.getPostsByAuthor(userId).map { list ->
-    list.map { it.toDomain() }
+    mapPostEntitiesToDomain(list)
+  }
+
+  fun getTaggedPostsByUser(userId: String): Flow<List<Post>> = dao.getTaggedPostsForUser(userId).map { list ->
+    mapPostEntitiesToDomain(list)
   }
 
   suspend fun createPost(
@@ -233,10 +562,12 @@ class SocivaRepository(
     content: String,
     mediaUrls: List<String>,
     feeling: String?,
-    audience: PostAudience
+    audience: PostAudience,
+    taggedUserIds: List<String> = emptyList()
   ) {
+    val postId = "post_" + UUID.randomUUID().toString().take(8)
     val newPost = PostEntity(
-      id = "post_" + UUID.randomUUID().toString().take(8),
+      id = postId,
       authorId = author.id,
       authorName = author.fullName,
       authorUsername = author.username,
@@ -254,6 +585,44 @@ class SocivaRepository(
       isSaved = false
     )
     dao.insertPost(newPost)
+
+    if (taggedUserIds.isNotEmpty()) {
+      val tags = taggedUserIds.map { taggedId ->
+        val targetUser = dao.getUserById(taggedId).first()
+        val status = if (targetUser?.reviewTagsBeforeAppearing == true) "pending" else "approved"
+        PostTagEntity(
+          id = "ptag_" + UUID.randomUUID().toString().take(8),
+          postId = postId,
+          taggedUserId = taggedId,
+          taggedByUserId = author.id,
+          status = status
+        )
+      }
+      dao.insertPostTags(tags)
+
+      // Notify tagged users
+      taggedUserIds.filter { it != author.id }.forEach { taggedId ->
+        dao.insertNotification(
+          NotificationEntity(
+            id = "notif_" + UUID.randomUUID().toString().take(8),
+            type = NotificationType.TAG.name,
+            actorName = author.fullName,
+            actorAvatar = author.avatarUrl,
+            isActorVerified = author.isVerified,
+            messageSnippet = "${author.fullName} tagged you in a post.",
+            timestamp = System.currentTimeMillis(),
+            isRead = false,
+            targetPostId = postId,
+            recipientId = taggedId,
+            senderId = author.id
+          )
+        )
+      }
+    }
+  }
+
+  suspend fun removePostTag(postId: String, userId: String) {
+    dao.removePostTag(postId, userId)
   }
 
   suspend fun deletePost(postId: String) {
@@ -419,6 +788,46 @@ class SocivaRepository(
     // Update post comments count with exact total
     val totalCount = dao.countAllCommentsForPost(postId)
     dao.updatePostCommentsCount(postId, totalCount)
+
+    // Handle @mentions in comment text
+    val mentionRegex = Regex("""@([A-Za-z0-9_.]+)""")
+    val matchResults = mentionRegex.findAll(sanitized)
+    val mentionedUsernames = matchResults.map { it.groupValues[1].lowercase() }.toSet()
+    if (mentionedUsernames.isNotEmpty()) {
+      val allUsers = dao.getAllUsers().first()
+      val mentionedUsers = allUsers.filter { u ->
+        mentionedUsernames.contains(u.username.lowercase()) ||
+        mentionedUsernames.contains(u.fullName.replace(" ", "").lowercase())
+      }
+      val mentionEntities = mentionedUsers.map { u ->
+        CommentMentionEntity(
+          id = "men_" + UUID.randomUUID().toString().take(8),
+          commentId = commentId,
+          mentionedUserId = u.id,
+          createdAt = now
+        )
+      }
+      dao.insertCommentMentions(mentionEntities)
+
+      // Notify mentioned users (if not the author)
+      mentionedUsers.filter { it.id != author.id }.forEach { u ->
+        dao.insertNotification(
+          NotificationEntity(
+            id = "notif_" + UUID.randomUUID().toString().take(8),
+            type = NotificationType.MENTION.name,
+            actorName = author.fullName,
+            actorAvatar = author.avatarUrl,
+            isActorVerified = author.isVerified,
+            messageSnippet = "${author.fullName} mentioned you in a comment: \"${sanitized.take(40)}\"",
+            timestamp = now,
+            isRead = false,
+            targetPostId = postId,
+            recipientId = u.id,
+            senderId = author.id
+          )
+        )
+      }
+    }
 
     return Result.success(newComment.toDomain())
   }
@@ -1091,10 +1500,45 @@ private fun UserEntity.toDomain() = User(
   isFriend = isFriend,
   isFollowing = isFollowing,
   profilePictureUpdatedAt = profilePictureUpdatedAt,
-  coverPhotoUpdatedAt = coverPhotoUpdatedAt
+  coverPhotoUpdatedAt = coverPhotoUpdatedAt,
+  firstName = firstName,
+  lastName = lastName,
+  pronouns = pronouns,
+  nickname = nickname,
+  otherNames = otherNames,
+  dateOfBirth = dateOfBirth,
+  gender = gender,
+  interestedIn = interestedIn,
+  hometown = hometown,
+  currentCity = currentCity,
+  country = country,
+  workplace = workplace,
+  workPosition = workPosition,
+  workStartDate = workStartDate,
+  workEndDate = workEndDate,
+  school = school,
+  college = college,
+  university = university,
+  degree = degree,
+  fieldOfStudy = fieldOfStudy,
+  graduationYear = graduationYear,
+  website = website,
+  email = email,
+  phone = phone,
+  relationshipStatus = relationshipStatus,
+  relationshipPartnerId = relationshipPartnerId,
+  relationshipPartnerName = relationshipPartnerName,
+  customRelationshipText = customRelationshipText,
+  birthdayPrivacy = birthdayPrivacy,
+  currentCityPrivacy = currentCityPrivacy,
+  hometownPrivacy = hometownPrivacy,
+  relationshipPrivacy = relationshipPrivacy,
+  emailPrivacy = emailPrivacy,
+  taggingPermission = taggingPermission,
+  reviewTagsBeforeAppearing = reviewTagsBeforeAppearing
 )
 
-private fun PostEntity.toDomain() = Post(
+private fun PostEntity.toDomain(taggedUsers: List<TaggedUser> = emptyList()) = Post(
   id = id,
   authorId = authorId,
   authorName = authorName,
@@ -1116,7 +1560,8 @@ private fun PostEntity.toDomain() = Post(
   myReaction = myReaction?.let {
     try { ReactionType.valueOf(it) } catch (e: Exception) { null }
   },
-  isSaved = isSaved
+  isSaved = isSaved,
+  taggedUsers = taggedUsers
 )
 
 private fun CommentEntity.toDomain(
@@ -1234,7 +1679,9 @@ private fun NotificationEntity.toDomain() = NotificationItem(
   messageSnippet = messageSnippet,
   timestamp = timestamp,
   isRead = isRead,
-  targetPostId = targetPostId
+  targetPostId = targetPostId,
+  actionData = actionData,
+  senderId = senderId
 )
 
 private fun FriendRequestEntity.toDomain() = FriendRequestItem(

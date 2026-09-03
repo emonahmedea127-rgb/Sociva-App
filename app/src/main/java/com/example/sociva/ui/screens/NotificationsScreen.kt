@@ -24,6 +24,7 @@ import com.example.sociva.ui.SocivaViewModel
 import com.example.sociva.ui.components.UserAvatar
 import com.example.sociva.ui.components.formatRelativeTime
 import com.example.ui.theme.SocivaBlue
+import com.example.ui.theme.SocivaIndigo
 import com.example.ui.theme.SocivaPink
 import com.example.ui.theme.SocivaPurple
 
@@ -118,6 +119,9 @@ fun NotificationRow(
     NotificationType.FOLLOW -> Icons.Default.AddCircle
     NotificationType.MENTION -> Icons.Default.AlternateEmail
     NotificationType.MESSAGE -> Icons.Default.Chat
+    NotificationType.RELATIONSHIP_REQUEST, NotificationType.RELATIONSHIP_ACCEPTED -> Icons.Default.Favorite
+    NotificationType.RELATIONSHIP_DECLINED -> Icons.Default.FavoriteBorder
+    NotificationType.TAG -> Icons.Default.Label
   }
 
   val typeColor = when (item.type) {
@@ -128,6 +132,9 @@ fun NotificationRow(
     NotificationType.FOLLOW -> SocivaPurple
     NotificationType.MENTION -> Color(0xFFF59E0B)
     NotificationType.MESSAGE -> SocivaBlue
+    NotificationType.RELATIONSHIP_REQUEST, NotificationType.RELATIONSHIP_ACCEPTED -> Color(0xFFEC4899)
+    NotificationType.RELATIONSHIP_DECLINED -> Color(0xFF6B7280)
+    NotificationType.TAG -> SocivaIndigo
   }
 
   Row(
