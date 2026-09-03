@@ -12,11 +12,13 @@ import com.example.sociva.data.service.MediaType
 import com.example.sociva.data.service.UploadState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 
 enum class SocivaScreen {
   MAIN,
   PROFILE,
+  MESSAGES,
   CHAT_DETAIL,
   CREATE_POST,
   STORY_VIEWER,
@@ -35,6 +37,7 @@ data class StoryMediaSelection(
   val mimeType: String = ""
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SocivaViewModel(application: Application) : AndroidViewModel(application) {
 
   private val database = SocivaDatabase.getDatabase(application)
@@ -58,6 +61,13 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
 
   private val _activeConversationId = MutableStateFlow<String?>("conv_sarah")
   val activeConversationId: StateFlow<String?> = _activeConversationId.asStateFlow()
+
+  // Story & Post Media Selection for native picker
+  private val _pendingStoryMedia = MutableStateFlow<StoryMediaSelection?>(null)
+  val pendingStoryMedia: StateFlow<StoryMediaSelection?> = _pendingStoryMedia.asStateFlow()
+
+  private val _pendingPostUris = MutableStateFlow<List<android.net.Uri>>(emptyList())
+  val pendingPostUris: StateFlow<List<android.net.Uri>> = _pendingPostUris.asStateFlow()
 
   private val _activeStoryIndex = MutableStateFlow(0)
   val activeStoryIndex: StateFlow<Int> = _activeStoryIndex.asStateFlow()
@@ -83,9 +93,18 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   private val _currentLanguage = MutableStateFlow("English")
   val currentLanguage: StateFlow<String> = _currentLanguage.asStateFlow()
 
-  // Authentication State
+  // Authentication & Current User State
+  private val _currentUserId = MutableStateFlow("user_me")
+  val currentUserId: StateFlow<String> = _currentUserId.asStateFlow()
+
   private val _isLoggedIn = MutableStateFlow(true)
   val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+  init {
+    viewModelScope.launch {
+      repository.setUserPresence(_currentUserId.value, isOnline = true)
+    }
+  }
 
   // Repositories Data Streams
   val allPosts: StateFlow<List<Post>> = repository.allPosts.stateIn(
@@ -100,23 +119,39 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
 
-  val conversations: StateFlow<List<Conversation>> = repository.conversations.stateIn(
+  val conversations: StateFlow<List<Conversation>> = _currentUserId.flatMapLatest { uid ->
+    repository.getConversations(uid)
+  }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
 
-  val notifications: StateFlow<List<NotificationItem>> = repository.notifications.stateIn(
+  val activeNowUsers: StateFlow<List<User>> = _currentUserId.flatMapLatest { uid ->
+    repository.getOnlineUsers(uid)
+  }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
 
-  val friendRequests: StateFlow<List<FriendRequestItem>> = repository.friendRequests.stateIn(
+  val notifications: StateFlow<List<NotificationItem>> = _currentUserId.flatMapLatest { uid ->
+    repository.getNotifications(uid)
+  }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
 
-  val sentFriendRequests: StateFlow<List<FriendRequestItem>> = repository.getSentFriendRequests("user_me").stateIn(
+  val friendRequests: StateFlow<List<FriendRequestItem>> = _currentUserId.flatMapLatest { uid ->
+    repository.getFriendRequests(uid)
+  }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
 
-  val friends: StateFlow<List<User>> = repository.friends.stateIn(
+  val sentFriendRequests: StateFlow<List<FriendRequestItem>> = _currentUserId.flatMapLatest { uid ->
+    repository.getSentFriendRequests(uid)
+  }.stateIn(
+    viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+  )
+
+  val friends: StateFlow<List<User>> = _currentUserId.flatMapLatest { uid ->
+    repository.getFriends(uid)
+  }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
 
@@ -140,13 +175,26 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
 
-  val currentUser: StateFlow<User?> = repository.getUser("user_me").stateIn(
+  val currentUser: StateFlow<User?> = _currentUserId.flatMapLatest { uid ->
+    repository.getUser(uid)
+  }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), null
   )
 
-  fun getPostComments(postId: String): Flow<List<Comment>> = repository.getComments(postId)
+  fun getPostComments(postId: String): Flow<List<Comment>> {
+    val currentUserId = currentUser.value?.id
+    return repository.getComments(postId, currentUserId)
+  }
 
-  fun getConversationMessages(convId: String): Flow<List<Message>> = repository.getMessages(convId)
+  fun getConversationMessages(convId: String): Flow<List<Message>> {
+    val uid = _currentUserId.value
+    return repository.getMessages(convId, uid)
+  }
+
+  fun getConversation(convId: String): Flow<Conversation?> {
+    val uid = _currentUserId.value
+    return repository.getConversation(convId, uid)
+  }
 
   fun getUser(userId: String): Flow<User?> = repository.getUser(userId)
 
@@ -243,12 +291,41 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   // Auth Operations
   fun login(email: String) {
     _isLoggedIn.value = true
+    viewModelScope.launch {
+      val users = repository.allUsers.first()
+      val usernamePart = email.substringBefore("@")
+      val match = users.find {
+        it.username.equals(usernamePart, ignoreCase = true) ||
+        it.fullName.contains(usernamePart, ignoreCase = true)
+      }
+      if (match != null) {
+        _currentUserId.value = match.id
+        repository.setUserPresence(match.id, isOnline = true)
+      } else {
+        repository.setUserPresence(_currentUserId.value, isOnline = true)
+      }
+    }
     showToast("Welcome back to Sociva, $email!")
   }
 
   fun logout() {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.setUserPresence(uid, isOnline = false)
+    }
     _isLoggedIn.value = false
     showToast("You have been logged out.")
+  }
+
+  fun switchUser(userId: String) {
+    val prev = _currentUserId.value
+    viewModelScope.launch {
+      repository.setUserPresence(prev, isOnline = false)
+      _currentUserId.value = userId
+      repository.setUserPresence(userId, isOnline = true)
+      val user = repository.getUser(userId).first()
+      showToast("Active user: ${user?.fullName ?: userId}")
+    }
   }
 
   // Actions
@@ -288,26 +365,206 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     }
   }
 
-  fun addComment(postId: String, text: String) {
+  fun addComment(postId: String, text: String, parentCommentId: String? = null) {
     val author = currentUser.value ?: return
     if (text.isBlank()) return
     viewModelScope.launch {
-      repository.addComment(postId, author, text.trim())
+      repository.addComment(postId, author, text.trim(), parentCommentId)
+    }
+  }
+
+  fun reactToComment(commentId: String, reactionType: ReactionType) {
+    val user = currentUser.value ?: return
+    viewModelScope.launch {
+      repository.reactToComment(commentId, user, reactionType)
+    }
+  }
+
+  fun removeCommentReaction(commentId: String) {
+    val user = currentUser.value ?: return
+    viewModelScope.launch {
+      repository.removeCommentReaction(commentId, user.id)
+    }
+  }
+
+  fun editComment(commentId: String, newContent: String) {
+    val user = currentUser.value ?: return
+    if (newContent.isBlank()) return
+    viewModelScope.launch {
+      repository.editComment(commentId, user.id, newContent.trim())
     }
   }
 
   fun deleteComment(commentId: String, postId: String) {
+    val user = currentUser.value ?: return
     viewModelScope.launch {
-      repository.deleteComment(commentId, postId)
+      repository.deleteComment(
+        commentId = commentId,
+        postId = postId,
+        userId = user.id,
+        isPostOwnerOrAdmin = false
+      )
     }
+  }
+
+  fun reportComment(commentId: String, snippet: String, reason: String) {
+    viewModelScope.launch {
+      repository.submitReport(
+        targetType = "comment",
+        targetId = commentId,
+        title = "Comment: ${snippet.take(40)}",
+        reason = reason
+      )
+    }
+  }
+
+  fun selectStoryMedia(uri: android.net.Uri, isVideo: Boolean, mimeType: String) {
+    _pendingStoryMedia.value = StoryMediaSelection(uri, isVideo, mimeType)
+    _activeScreen.value = SocivaScreen.STORY_EDITOR
+  }
+
+  fun clearStoryMedia() {
+    _pendingStoryMedia.value = null
+  }
+
+  fun setPendingPostUris(uris: List<android.net.Uri>) {
+    _pendingPostUris.value = uris
+  }
+
+  fun appendPendingPostUris(uris: List<android.net.Uri>) {
+    val current = _pendingPostUris.value.toMutableList()
+    uris.forEach { if (!current.contains(it)) current.add(it) }
+    _pendingPostUris.value = current
+  }
+
+  fun removePendingPostUri(uri: android.net.Uri) {
+    _pendingPostUris.value = _pendingPostUris.value.filter { it != uri }
+  }
+
+  fun clearPendingPostUris() {
+    _pendingPostUris.value = emptyList()
   }
 
   fun createStory(text: String, mediaUrl: String?, gradientIndex: Int) {
     val user = currentUser.value ?: return
     viewModelScope.launch {
       repository.createStory(user, text, mediaUrl, gradientIndex)
+      _pendingStoryMedia.value = null
       _activeScreen.value = SocivaScreen.MAIN
       showToast("Your story is live for 24 hours! ✨")
+    }
+  }
+
+  fun uploadAndCreateStory(
+    uri: android.net.Uri,
+    text: String,
+    gradientIndex: Int,
+    isVideo: Boolean = false
+  ) {
+    val user = currentUser.value ?: return
+    viewModelScope.launch {
+      _uploadState.value = UploadState.Validating("Validating story media...")
+      val validation = mediaService.validateMediaUri(uri)
+      if (!validation.isValid) {
+        _uploadState.value = UploadState.Error(validation.errorMessage ?: "Invalid media file.")
+        showToast(validation.errorMessage ?: "Invalid media file.")
+        return@launch
+      }
+
+      val mediaType = MediaType.STORY_MEDIA
+      val result = mediaService.uploadMediaFromUri(
+        uri = uri,
+        userId = user.id,
+        type = mediaType,
+        onProgress = { p ->
+          _uploadState.value = UploadState.Uploading(p)
+        }
+      )
+
+      result.fold(
+        onSuccess = { processed ->
+          repository.createStory(
+            user = user,
+            text = text,
+            mediaUrl = processed.url,
+            gradientIndex = gradientIndex
+          )
+          _uploadState.value = UploadState.Success(processed.url, mediaType)
+          _pendingStoryMedia.value = null
+          _activeScreen.value = SocivaScreen.MAIN
+          showToast("Story shared! 🌟")
+          delay(800)
+          _uploadState.value = UploadState.Idle
+        },
+        onFailure = { err ->
+          _uploadState.value = UploadState.Error(err.localizedMessage ?: "Failed to upload story media.")
+          showToast("Upload failed: ${err.localizedMessage ?: "Unknown error"}")
+        }
+      )
+    }
+  }
+
+  fun uploadAndCreatePost(
+    content: String,
+    uris: List<android.net.Uri>,
+    additionalUrls: List<String> = emptyList(),
+    feeling: String?,
+    audience: PostAudience
+  ) {
+    val user = currentUser.value ?: return
+    viewModelScope.launch {
+      val uploadedUrls = mutableListOf<String>()
+      uploadedUrls.addAll(additionalUrls)
+
+      if (uris.isNotEmpty()) {
+        _uploadState.value = UploadState.Validating("Preparing ${uris.size} media file(s)...")
+        for ((idx, uri) in uris.withIndex()) {
+          val validation = mediaService.validateMediaUri(uri)
+          if (!validation.isValid) {
+            _uploadState.value = UploadState.Error(validation.errorMessage ?: "Media file #$idx is invalid.")
+            showToast("Error with media: ${validation.errorMessage}")
+            return@launch
+          }
+          val mediaType = MediaType.POST_MEDIA
+
+          val uploadRes = mediaService.uploadMediaFromUri(
+            uri = uri,
+            userId = user.id,
+            type = mediaType,
+            onProgress = { p ->
+              val overall = (idx.toFloat() + p) / uris.size.toFloat()
+              _uploadState.value = UploadState.Uploading(overall)
+            }
+          )
+
+          uploadRes.fold(
+            onSuccess = { processed ->
+              uploadedUrls.add(processed.url)
+            },
+            onFailure = { err ->
+              _uploadState.value = UploadState.Error("Upload failed for item #${idx + 1}: ${err.localizedMessage}")
+              showToast("Failed to upload media: ${err.localizedMessage}")
+              return@launch
+            }
+          )
+        }
+      }
+
+      // Save post to repository
+      repository.createPost(
+        author = user,
+        content = content,
+        mediaUrls = uploadedUrls,
+        feeling = feeling,
+        audience = audience
+      )
+
+      _uploadState.value = UploadState.Success(uploadedUrls.firstOrNull() ?: "", MediaType.POST_MEDIA)
+      _pendingPostUris.value = emptyList()
+      _activeScreen.value = SocivaScreen.MAIN
+      showToast("Your post has been published to Sociva! 🎉")
+      delay(800)
+      _uploadState.value = UploadState.Idle
     }
   }
 
@@ -323,10 +580,34 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch { repository.toggleReelFollow(reelId) }
   }
 
-  fun sendMessage(convId: String, text: String, mediaUrl: String? = null) {
-    if (text.isBlank()) return
+  fun sendMessage(convId: String, text: String, mediaUrl: String? = null, messageType: String = "TEXT") {
+    if (text.isBlank() && mediaUrl.isNullOrBlank()) return
+    val senderId = _currentUserId.value
     viewModelScope.launch {
-      repository.sendMessage(convId, text.trim(), mediaUrl)
+      repository.sendMessage(convId, senderId, text.trim(), mediaUrl, messageType)
+    }
+  }
+
+  fun markConversationAsRead(convId: String) {
+    val myId = _currentUserId.value
+    viewModelScope.launch {
+      repository.markConversationAsRead(convId, myId)
+    }
+  }
+
+  fun setTyping(convId: String, isTyping: Boolean) {
+    val myId = _currentUserId.value
+    repository.setTyping(convId, myId, isTyping)
+  }
+
+  fun getTypingUsers(convId: String): Flow<List<String>> {
+    val myId = _currentUserId.value
+    return repository.getTypingUsers(convId, myId)
+  }
+
+  fun softDeleteMessage(messageId: String) {
+    viewModelScope.launch {
+      repository.softDeleteMessage(messageId)
     }
   }
 
@@ -334,6 +615,25 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch {
       repository.deleteMessage(messageId)
     }
+  }
+
+  fun openOrCreateConversationWithUser(targetUserId: String) {
+    val myId = _currentUserId.value
+    viewModelScope.launch {
+      val convId = repository.getOrCreateConversation(myId, targetUserId)
+      _activeConversationId.value = convId
+      _activeScreen.value = SocivaScreen.CHAT_DETAIL
+    }
+  }
+
+  fun searchUsers(query: String): Flow<List<User>> {
+    val myId = _currentUserId.value
+    return repository.searchUsers(query, myId)
+  }
+
+  fun getAllUsersExceptMe(): Flow<List<User>> {
+    val myId = _currentUserId.value
+    return repository.getAllUsersExcept(myId)
   }
 
   fun getFriendStatusFlow(userId: String): Flow<FriendStatus> =
@@ -586,5 +886,17 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
 
   fun dismissUploadState() {
     _uploadState.value = UploadState.Idle
+  }
+
+  fun saveBitmapToTempUri(bitmap: android.graphics.Bitmap): android.net.Uri? {
+    return try {
+      val file = java.io.File(getApplication<Application>().cacheDir, "temp_capture_${System.currentTimeMillis()}.jpg")
+      java.io.FileOutputStream(file).use { out ->
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+      }
+      android.net.Uri.fromFile(file)
+    } catch (e: Exception) {
+      null
+    }
   }
 }

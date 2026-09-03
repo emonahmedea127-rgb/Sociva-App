@@ -24,7 +24,9 @@ enum class NotificationType(val title: String) {
   FOLLOW("started following you"),
   MESSAGE("sent you a message"),
   MENTION("mentioned you in a post"),
-  STORY_REACTION("reacted to your story")
+  STORY_REACTION("reacted to your story"),
+  COMMENT_REACTION("reacted to your comment"),
+  COMMENT_REPLY("replied to your comment")
 }
 
 data class User(
@@ -44,6 +46,7 @@ data class User(
   val location: String = "",
   val joinedDate: String = "September 2024",
   val isOnline: Boolean = false,
+  val lastActiveAt: Long = 0L,
   val isFriend: Boolean = false,
   val isFollowing: Boolean = false,
   val profilePictureUpdatedAt: Long = 0L,
@@ -78,8 +81,23 @@ data class Comment(
   val isAuthorVerified: Boolean = false,
   val content: String,
   val timestamp: Long,
+  val updatedAt: Long = timestamp,
+  val parentCommentId: String? = null,
+  val replyToAuthorName: String? = null,
   val likesCount: Int = 0,
-  val isLiked: Boolean = false
+  val isLiked: Boolean = false,
+  val myReaction: ReactionType? = null,
+  val reactionsCount: Int = likesCount,
+  val repliesCount: Int = 0,
+  val replies: List<Comment> = emptyList()
+)
+
+data class CommentReaction(
+  val id: String,
+  val commentId: String,
+  val userId: String,
+  val reactionType: ReactionType,
+  val createdAt: Long
 )
 
 data class Story(
@@ -125,17 +143,21 @@ data class Conversation(
   val lastMessage: String,
   val lastMessageTimestamp: Long,
   val unreadCount: Int = 0,
-  val isOnline: Boolean = true
+  val isOnline: Boolean = false,
+  val lastActiveAt: Long = 0L
 )
 
 data class Message(
   val id: String,
   val conversationId: String,
   val senderId: String,
+  val receiverId: String = "",
+  val messageType: String = "TEXT",
   val text: String,
   val mediaUrl: String? = null,
   val timestamp: Long,
-  val isSeen: Boolean = true,
+  val isSeen: Boolean = false,
+  val isDeleted: Boolean = false,
   val isMine: Boolean = true
 )
 

@@ -10,9 +10,11 @@ import androidx.room.RoomDatabase
     UserEntity::class,
     PostEntity::class,
     CommentEntity::class,
+    CommentReactionEntity::class,
     StoryEntity::class,
     ReelEntity::class,
     ConversationEntity::class,
+    ConversationMemberEntity::class,
     MessageEntity::class,
     NotificationEntity::class,
     FriendRequestEntity::class,
@@ -22,7 +24,7 @@ import androidx.room.RoomDatabase
     GroupEntity::class,
     ReportEntity::class
   ],
-  version = 3,
+  version = 5,
   exportSchema = false
 )
 abstract class SocivaDatabase : RoomDatabase() {

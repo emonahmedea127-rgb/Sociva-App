@@ -1,5 +1,9 @@
 package com.example.sociva.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,7 +35,10 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.sociva.data.model.PostAudience
 import com.example.sociva.data.model.User
+import com.example.sociva.data.service.UploadState
 import com.example.sociva.ui.SocivaViewModel
+import com.example.sociva.ui.components.MediaPickerActionBar
+import com.example.sociva.ui.components.SelectedMediaThumbnailItem
 import com.example.sociva.ui.components.UserAvatar
 import com.example.ui.theme.*
 
@@ -42,23 +49,51 @@ fun PostComposerScreen(
   onBack: () -> Unit
 ) {
   val currentUser by viewModel.currentUser.collectAsState()
+  val pendingUrisFromVm by viewModel.pendingPostUris.collectAsState()
+  val uploadState by viewModel.uploadState.collectAsState()
+  val context = LocalContext.current
+
   var postText by remember { mutableStateOf("") }
   var selectedAudience by remember { mutableStateOf(PostAudience.PUBLIC) }
   var selectedFeeling by remember { mutableStateOf<String?>(null) }
   var showAudienceDropdown by remember { mutableStateOf(false) }
   var showFeelingPicker by remember { mutableStateOf(false) }
-  var selectedImages by remember { mutableStateOf(listOf<String>()) }
   var isCreatingStory by remember { mutableStateOf(false) }
   var selectedGradientIndex by remember { mutableStateOf(0) }
 
-  // Sample photos to attach quickly
-  val samplePhotos = listOf(
-    "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=800&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&h=600&fit=crop",
-    "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=800&h=600&fit=crop"
-  )
+  // Media URIs state (synced with pending post URIs from direct picker)
+  var localSelectedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
+  LaunchedEffect(pendingUrisFromVm) {
+    if (pendingUrisFromVm.isNotEmpty()) {
+      localSelectedUris = pendingUrisFromVm
+    }
+  }
+
+  // Native Multiple Photo & Video Picker (Android PhotoPicker / Gallery)
+  val multiMediaPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
+  ) { uris: List<Uri> ->
+    if (uris.isNotEmpty()) {
+      val combined = (localSelectedUris + uris).distinct()
+      localSelectedUris = combined
+      viewModel.setPendingPostUris(combined)
+    }
+  }
+
+  // Camera capture fallback launcher
+  val takePhotoLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.TakePicturePreview()
+  ) { bitmap ->
+    if (bitmap != null) {
+      val uri = viewModel.saveBitmapToTempUri(bitmap)
+      if (uri != null) {
+        val combined = localSelectedUris + uri
+        localSelectedUris = combined
+        viewModel.setPendingPostUris(combined)
+      }
+    }
+  }
 
   val gradients = listOf(
     listOf(Color(0xFF2563EB), Color(0xFF7C3AED)),
@@ -67,6 +102,8 @@ fun PostComposerScreen(
     listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)),
     listOf(Color(0xFF10B981), Color(0xFF06B6D4))
   )
+
+  val isUploading = uploadState is UploadState.Uploading || uploadState is UploadState.Validating
 
   Scaffold(
     topBar = {
@@ -79,7 +116,10 @@ fun PostComposerScreen(
         },
         navigationIcon = {
           IconButton(
-            onClick = onBack,
+            onClick = {
+              viewModel.clearPendingPostUris()
+              onBack()
+            },
             modifier = Modifier.testTag("composer_back_button")
           ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -89,21 +129,32 @@ fun PostComposerScreen(
           Button(
             onClick = {
               if (isCreatingStory) {
-                viewModel.createStory(
-                  text = postText,
-                  mediaUrl = selectedImages.firstOrNull(),
-                  gradientIndex = selectedGradientIndex
-                )
+                val firstUri = localSelectedUris.firstOrNull()
+                if (firstUri != null) {
+                  val mime = context.contentResolver.getType(firstUri) ?: ""
+                  viewModel.uploadAndCreateStory(
+                    uri = firstUri,
+                    text = postText,
+                    gradientIndex = selectedGradientIndex,
+                    isVideo = mime.startsWith("video")
+                  )
+                } else {
+                  viewModel.createStory(
+                    text = postText,
+                    mediaUrl = null,
+                    gradientIndex = selectedGradientIndex
+                  )
+                }
               } else {
-                viewModel.createPost(
+                viewModel.uploadAndCreatePost(
                   content = postText,
-                  mediaUrls = selectedImages,
+                  uris = localSelectedUris,
                   feeling = selectedFeeling,
                   audience = selectedAudience
                 )
               }
             },
-            enabled = postText.isNotBlank() || selectedImages.isNotEmpty(),
+            enabled = !isUploading && (postText.isNotBlank() || localSelectedUris.isNotEmpty()),
             shape = RoundedCornerShape(20.dp),
             colors = ButtonDefaults.buttonColors(
               containerColor = SocivaBlue,
@@ -312,108 +363,67 @@ fun PostComposerScreen(
         }
       }
 
-      // Attached Images preview
-      if (selectedImages.isNotEmpty()) {
-        Text(
-          text = "Attached Photos (${selectedImages.size})",
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          items(selectedImages) { url ->
-            Box(
-              modifier = Modifier
-                .size(110.dp)
-                .clip(RoundedCornerShape(12.dp))
-            ) {
-              AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                  .data(url)
-                  .crossfade(true)
-                  .build(),
-                contentDescription = "Attached photo",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+      // Native Selected Media Preview (Photos / Videos)
+      if (localSelectedUris.isNotEmpty()) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = "Selected Media (${localSelectedUris.size})",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold
+          )
+          TextButton(
+            onClick = {
+              multiMediaPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
               )
-              IconButton(
-                onClick = { selectedImages = selectedImages - url },
-                modifier = Modifier
-                  .align(Alignment.TopEnd)
-                  .size(28.dp)
-                  .padding(4.dp)
-                  .clip(CircleShape)
-                  .background(Color.Black.copy(alpha = 0.6f))
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Close,
-                  contentDescription = "Remove",
-                  tint = Color.White,
-                  modifier = Modifier.size(14.dp)
-                )
-              }
             }
-          }
-        }
-      }
-
-      // Quick Media Gallery to Attach
-      Text(
-        text = "Tap to add photos:",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-
-      LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        items(samplePhotos) { photoUrl ->
-          val isAdded = selectedImages.contains(photoUrl)
-          Box(
-            modifier = Modifier
-              .size(70.dp)
-              .clip(RoundedCornerShape(10.dp))
-              .border(
-                width = if (isAdded) 2.5.dp else 0.5.dp,
-                color = if (isAdded) SocivaBlue else MaterialTheme.colorScheme.outline,
-                shape = RoundedCornerShape(10.dp)
-              )
-              .clickable {
-                selectedImages = if (isAdded) {
-                  selectedImages - photoUrl
-                } else {
-                  selectedImages + photoUrl
-                }
-              }
           ) {
-            AsyncImage(
-              model = ImageRequest.Builder(LocalContext.current)
-                .data(photoUrl)
-                .crossfade(true)
-                .build(),
-              contentDescription = "Sample photo",
-              contentScale = ContentScale.Crop,
-              modifier = Modifier.fillMaxSize()
-            )
-            if (isAdded) {
-              Box(
-                modifier = Modifier
-                  .fillMaxSize()
-                  .background(SocivaBlue.copy(alpha = 0.35f)),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.Default.CheckCircle,
-                  contentDescription = "Selected",
-                  tint = Color.White
-                )
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Add More")
+          }
+        }
+
+        LazyRow(
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("selected_media_gallery_preview")
+        ) {
+          items(localSelectedUris) { uri ->
+            val mime = context.contentResolver.getType(uri) ?: ""
+            val isVid = mime.startsWith("video")
+            SelectedMediaThumbnailItem(
+              uri = uri,
+              isVideo = isVid,
+              onRemove = {
+                val updated = localSelectedUris.filter { it != uri }
+                localSelectedUris = updated
+                viewModel.removePendingPostUri(uri)
               }
-            }
+            )
           }
         }
       }
 
-      HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+      // Native Media Picker Action Bar (Facebook-Style "Add to your post")
+      MediaPickerActionBar(
+        onPickMedia = {
+          multiMediaPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+          )
+        },
+        onPickCamera = {
+          takePhotoLauncher.launch(null)
+        },
+        onFeelingClick = {
+          showFeelingPicker = true
+        }
+      )
 
       // Bottom Add Options: Feeling/Activity
       Row(
@@ -446,6 +456,41 @@ fun PostComposerScreen(
           contentDescription = null,
           tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
+      }
+    }
+
+    // Uploading Indicator Overlay
+    if (isUploading) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.Center
+      ) {
+        Card(
+          shape = RoundedCornerShape(16.dp),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+          elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+          modifier = Modifier.padding(24.dp)
+        ) {
+          Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+          ) {
+            CircularProgressIndicator(color = SocivaBlue)
+            val label = when (val st = uploadState) {
+              is UploadState.Uploading -> "Uploading media... ${(st.progress * 100).toInt()}%"
+              is UploadState.Validating -> st.message
+              else -> "Publishing..."
+            }
+            Text(
+              text = label,
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.SemiBold
+            )
+          }
+        }
       }
     }
   }

@@ -446,7 +446,7 @@ fun ProfileScreen(
 
                 // 2. Message Button
                 OutlinedButton(
-                  onClick = { viewModel.navigateToChat("conv_sarah") },
+                  onClick = { viewModel.openOrCreateConversationWithUser(userId) },
                   modifier = Modifier
                     .weight(1f)
                     .testTag("message_button"),

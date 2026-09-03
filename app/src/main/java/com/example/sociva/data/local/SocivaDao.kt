@@ -38,7 +38,7 @@ interface SocivaDao {
   @Query("UPDATE posts SET authorAvatar = :avatarUrl WHERE authorId = :userId")
   suspend fun updateAuthorAvatarInPosts(userId: String, avatarUrl: String)
 
-  @Query("UPDATE comments SET authorAvatar = :avatarUrl WHERE authorId = :userId")
+  @Query("UPDATE comments SET authorAvatar = :avatarUrl WHERE user_id = :userId")
   suspend fun updateAuthorAvatarInComments(userId: String, avatarUrl: String)
 
   @Query("UPDATE stories SET userAvatar = :avatarUrl WHERE userId = :userId")
@@ -79,8 +79,26 @@ interface SocivaDao {
   suspend fun deletePostById(postId: String)
 
   // Comments
-  @Query("SELECT * FROM comments WHERE postId = :postId ORDER BY timestamp ASC")
+  @Query("SELECT * FROM comments WHERE post_id = :postId ORDER BY created_at ASC")
   fun getCommentsForPost(postId: String): Flow<List<CommentEntity>>
+
+  @Query("SELECT * FROM comments WHERE id = :commentId LIMIT 1")
+  fun getCommentById(commentId: String): Flow<CommentEntity?>
+
+  @Query("SELECT * FROM comments WHERE id = :commentId LIMIT 1")
+  suspend fun findCommentById(commentId: String): CommentEntity?
+
+  @Query("SELECT * FROM posts WHERE id = :postId LIMIT 1")
+  suspend fun findPostById(postId: String): PostEntity?
+
+  @Query("SELECT * FROM comments WHERE parent_comment_id = :parentCommentId ORDER BY created_at ASC")
+  fun getRepliesForComment(parentCommentId: String): Flow<List<CommentEntity>>
+
+  @Query("SELECT * FROM comments WHERE parent_comment_id = :parentCommentId ORDER BY created_at ASC")
+  suspend fun getRepliesForCommentList(parentCommentId: String): List<CommentEntity>
+
+  @Query("SELECT COUNT(*) FROM comments WHERE post_id = :postId")
+  suspend fun countAllCommentsForPost(postId: String): Int
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertComments(comments: List<CommentEntity>)
@@ -88,8 +106,48 @@ interface SocivaDao {
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertComment(comment: CommentEntity)
 
+  @Update
+  suspend fun updateComment(comment: CommentEntity)
+
+  @Query("UPDATE comments SET likesCount = :likesCount WHERE id = :commentId")
+  suspend fun updateCommentLikesCount(commentId: String, likesCount: Int)
+
+  @Query("UPDATE posts SET commentsCount = :count WHERE id = :postId")
+  suspend fun updatePostCommentsCount(postId: String, count: Int)
+
   @Query("DELETE FROM comments WHERE id = :commentId")
   suspend fun deleteComment(commentId: String)
+
+  @Query("DELETE FROM comments WHERE parent_comment_id = :parentCommentId")
+  suspend fun deleteRepliesForComment(parentCommentId: String)
+
+  // Comment Reactions
+  @Query("SELECT * FROM comment_reactions WHERE comment_id IN (SELECT id FROM comments WHERE post_id = :postId)")
+  fun getReactionsForPostComments(postId: String): Flow<List<CommentReactionEntity>>
+
+  @Query("SELECT * FROM comment_reactions WHERE comment_id = :commentId")
+  fun getReactionsForComment(commentId: String): Flow<List<CommentReactionEntity>>
+
+  @Query("SELECT * FROM comment_reactions WHERE comment_id = :commentId AND user_id = :userId LIMIT 1")
+  fun getCommentReaction(commentId: String, userId: String): Flow<CommentReactionEntity?>
+
+  @Query("SELECT * FROM comment_reactions WHERE comment_id = :commentId AND user_id = :userId LIMIT 1")
+  suspend fun findCommentReaction(commentId: String, userId: String): CommentReactionEntity?
+
+  @Query("SELECT COUNT(*) FROM comment_reactions WHERE comment_id = :commentId")
+  suspend fun countReactionsForComment(commentId: String): Int
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCommentReaction(reaction: CommentReactionEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertCommentReactions(reactions: List<CommentReactionEntity>)
+
+  @Query("DELETE FROM comment_reactions WHERE comment_id = :commentId AND user_id = :userId")
+  suspend fun deleteCommentReaction(commentId: String, userId: String)
+
+  @Query("DELETE FROM comment_reactions WHERE comment_id = :commentId")
+  suspend fun deleteReactionsForComment(commentId: String)
 
   // Stories
   @Query("SELECT * FROM stories WHERE expiresAt > :currentTime ORDER BY timestamp DESC")
@@ -115,6 +173,42 @@ interface SocivaDao {
   suspend fun updateReel(reel: ReelEntity)
 
   // Conversations & Messages
+  @Query("""
+    SELECT 
+      c.id AS conversationId,
+      c.lastMessage AS lastMessage,
+      c.lastMessageTimestamp AS lastMessageTimestamp,
+      u.id AS participantId,
+      u.fullName AS participantName,
+      u.username AS participantUsername,
+      u.avatarUrl AS participantAvatar,
+      u.isVerified AS isParticipantVerified,
+      u.isOnline AS isOnline,
+      u.lastActiveAt AS lastActiveAt,
+      (SELECT COUNT(*) FROM messages m 
+       WHERE m.conversationId = c.id 
+         AND (m.receiverId = :userId OR (m.receiverId = '' AND m.senderId != :userId))
+         AND m.isSeen = 0 
+         AND m.isDeleted = 0) AS unreadCount
+    FROM conversations c
+    INNER JOIN conversation_members my_mem ON c.id = my_mem.conversationId AND my_mem.userId = :userId
+    INNER JOIN conversation_members other_mem ON c.id = other_mem.conversationId AND other_mem.userId != :userId
+    INNER JOIN users u ON other_mem.userId = u.id
+    ORDER BY c.lastMessageTimestamp DESC
+  """)
+  fun getConversationsForUser(userId: String): Flow<List<ConversationWithParticipant>>
+
+  @Query("""
+    SELECT cm1.conversationId FROM conversation_members cm1
+    INNER JOIN conversation_members cm2 ON cm1.conversationId = cm2.conversationId
+    WHERE cm1.userId = :userA AND cm2.userId = :userB
+    LIMIT 1
+  """)
+  suspend fun findDirectConversation(userA: String, userB: String): String?
+
+  @Query("SELECT * FROM conversations WHERE id = :convId LIMIT 1")
+  suspend fun getConversationById(convId: String): ConversationEntity?
+
   @Query("SELECT * FROM conversations ORDER BY lastMessageTimestamp DESC")
   fun getAllConversations(): Flow<List<ConversationEntity>>
 
@@ -123,6 +217,24 @@ interface SocivaDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertConversation(conversation: ConversationEntity)
+
+  @Query("UPDATE conversations SET lastMessage = :lastMsg, lastMessageTimestamp = :timestamp, updatedAt = :timestamp WHERE id = :convId")
+  suspend fun updateConversationLastMessage(convId: String, lastMsg: String, timestamp: Long)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertConversationMember(member: ConversationMemberEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertConversationMembers(members: List<ConversationMemberEntity>)
+
+  @Query("SELECT * FROM conversation_members WHERE conversationId = :convId")
+  suspend fun getConversationMembers(convId: String): List<ConversationMemberEntity>
+
+  @Query("SELECT * FROM conversation_members WHERE conversationId = :convId AND userId != :currentUserId LIMIT 1")
+  suspend fun getOtherMember(convId: String, currentUserId: String): ConversationMemberEntity?
+
+  @Query("UPDATE conversation_members SET lastReadAt = :readTime WHERE conversationId = :convId AND userId = :userId")
+  suspend fun updateMemberLastRead(convId: String, userId: String, readTime: Long)
 
   @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
   fun getMessagesForConversation(conversationId: String): Flow<List<MessageEntity>>
@@ -133,8 +245,26 @@ interface SocivaDao {
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertMessage(message: MessageEntity)
 
+  @Query("UPDATE messages SET isSeen = 1, updatedAt = :seenTime WHERE conversationId = :convId AND senderId != :currentUserId AND isSeen = 0")
+  suspend fun markMessagesAsSeen(convId: String, currentUserId: String, seenTime: Long)
+
+  @Query("UPDATE messages SET isDeleted = 1, text = :unsentText, updatedAt = :timestamp WHERE id = :messageId")
+  suspend fun softDeleteMessage(messageId: String, unsentText: String = "This message was unsent", timestamp: Long = System.currentTimeMillis())
+
   @Query("DELETE FROM messages WHERE id = :messageId")
   suspend fun deleteMessage(messageId: String)
+
+  @Query("UPDATE users SET isOnline = :isOnline, lastActiveAt = :lastActiveAt WHERE id = :userId")
+  suspend fun updateUserPresence(userId: String, isOnline: Boolean, lastActiveAt: Long)
+
+  @Query("SELECT * FROM users WHERE id != :currentUserId AND isOnline = 1 ORDER BY lastActiveAt DESC")
+  fun getOnlineUsers(currentUserId: String): Flow<List<UserEntity>>
+
+  @Query("SELECT * FROM users WHERE id != :currentUserId AND (fullName LIKE '%' || :query || '%' OR username LIKE '%' || :query || '%') ORDER BY fullName ASC")
+  fun searchUsers(query: String, currentUserId: String): Flow<List<UserEntity>>
+
+  @Query("SELECT * FROM users WHERE id != :currentUserId ORDER BY fullName ASC")
+  fun getAllUsersExcept(currentUserId: String): Flow<List<UserEntity>>
 
   // Notifications
   @Query("SELECT * FROM notifications ORDER BY timestamp DESC")

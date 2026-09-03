@@ -41,9 +41,14 @@ fun SocivaApp(
   val activeConversationId by viewModel.activeConversationId.collectAsState()
   val notifications by viewModel.notifications.collectAsState()
   val friendRequests by viewModel.friendRequests.collectAsState()
+  val conversations by viewModel.conversations.collectAsState()
 
   val unreadNotificationsCount = remember(notifications) {
     notifications.count { !it.isRead }
+  }
+
+  val unreadMessagesCount = remember(conversations) {
+    conversations.sumOf { it.unreadCount }
   }
 
   val snackbarHostState = remember { SnackbarHostState() }
@@ -87,11 +92,26 @@ fun SocivaApp(
       )
       return
     }
+    SocivaScreen.STORY_EDITOR -> {
+      StoryEditorScreen(
+        viewModel = viewModel,
+        onClose = { viewModel.navigateTo(SocivaScreen.MAIN) }
+      )
+      return
+    }
+    SocivaScreen.MESSAGES -> {
+      MessagesScreen(
+        viewModel = viewModel,
+        onBack = { viewModel.navigateTo(SocivaScreen.MAIN) },
+        onOpenConversation = { convId -> viewModel.navigateToChat(convId) }
+      )
+      return
+    }
     SocivaScreen.CHAT_DETAIL -> {
       ChatDetailScreen(
         conversationId = activeConversationId ?: "conv_sarah",
         viewModel = viewModel,
-        onBack = { viewModel.navigateTo(SocivaScreen.MAIN) }
+        onBack = { viewModel.navigateTo(SocivaScreen.MESSAGES) }
       )
       return
     }
@@ -157,7 +177,8 @@ fun SocivaApp(
       if (selectedTab != 1) { // Don't show standard top bar in Reels full screen
         SocivaTopBar(
           onSearchClick = { viewModel.navigateTo(SocivaScreen.SEARCH) },
-          onMessagesClick = { viewModel.navigateToChat("conv_sarah") },
+          onMessagesClick = { viewModel.navigateTo(SocivaScreen.MESSAGES) },
+          unreadMessagesCount = unreadMessagesCount,
           onThemeToggle = { viewModel.toggleTheme(!isDarkTheme) },
           isDarkTheme = isDarkTheme
         )

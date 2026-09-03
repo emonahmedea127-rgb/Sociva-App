@@ -1,5 +1,9 @@
 package com.example.sociva.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,6 +46,28 @@ fun HomeScreen(
   val posts by viewModel.allPosts.collectAsState()
   val stories by viewModel.activeStories.collectAsState()
   val currentUser by viewModel.currentUser.collectAsState()
+  val context = LocalContext.current
+
+  // 1. Direct Story Media Picker Launcher (Home -> Create Story -> Native Picker -> Story Editor)
+  val storyMediaPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia()
+  ) { uri: Uri? ->
+    if (uri != null) {
+      val mimeType = context.contentResolver.getType(uri) ?: ""
+      val isVideo = mimeType.startsWith("video")
+      viewModel.selectStoryMedia(uri, isVideo, mimeType)
+    }
+  }
+
+  // 2. Direct Post Multi-Media Picker Launcher (Home Photo/Video -> Native Picker -> Post Composer)
+  val postMediaPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
+  ) { uris: List<Uri> ->
+    if (uris.isNotEmpty()) {
+      viewModel.setPendingPostUris(uris)
+      viewModel.navigateTo(com.example.sociva.ui.SocivaScreen.CREATE_POST)
+    }
+  }
 
   LazyColumn(
     modifier = modifier
@@ -54,7 +80,17 @@ fun HomeScreen(
     item {
       PostComposerPromptCard(
         currentUser = currentUser,
-        onOpenComposer = { viewModel.navigateTo(com.example.sociva.ui.SocivaScreen.CREATE_POST) }
+        onOpenComposer = { viewModel.navigateTo(com.example.sociva.ui.SocivaScreen.CREATE_POST) },
+        onPickPhotoVideo = {
+          postMediaPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+          )
+        },
+        onCreateStoryDirect = {
+          storyMediaPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+          )
+        }
       )
     }
 
@@ -63,7 +99,11 @@ fun HomeScreen(
       StoriesSection(
         stories = stories,
         currentUser = currentUser,
-        onCreateStory = { viewModel.navigateTo(com.example.sociva.ui.SocivaScreen.CREATE_POST) },
+        onCreateStory = {
+          storyMediaPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+          )
+        },
         onStoryClick = { index -> viewModel.openStoryViewer(index) }
       )
     }
@@ -90,7 +130,9 @@ fun HomeScreen(
 @Composable
 fun PostComposerPromptCard(
   currentUser: User?,
-  onOpenComposer: () -> Unit
+  onOpenComposer: () -> Unit,
+  onPickPhotoVideo: () -> Unit = onOpenComposer,
+  onCreateStoryDirect: () -> Unit = onOpenComposer
 ) {
   Card(
     modifier = Modifier
@@ -146,7 +188,7 @@ fun PostComposerPromptCard(
           icon = Icons.Default.PhotoLibrary,
           iconTint = Color(0xFF10B981),
           label = "Photo/Video",
-          onClick = onOpenComposer
+          onClick = onPickPhotoVideo
         )
 
         ComposerActionButton(
@@ -160,7 +202,7 @@ fun PostComposerPromptCard(
           icon = Icons.Default.AutoAwesome,
           iconTint = SocivaPurple,
           label = "Story",
-          onClick = onOpenComposer
+          onClick = onCreateStoryDirect
         )
       }
     }

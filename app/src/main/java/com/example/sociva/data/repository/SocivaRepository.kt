@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -24,6 +25,11 @@ class SocivaRepository(
       val existingUsers = dao.getAllUsers().first()
       if (existingUsers.isEmpty()) {
         seedDatabase()
+      } else {
+        val existingMembers = dao.getConversationMembers("conv_sarah")
+        if (existingMembers.isEmpty()) {
+          dao.insertConversationMembers(SeedData.conversationMembers)
+        }
       }
     }
   }
@@ -32,9 +38,11 @@ class SocivaRepository(
     dao.insertUsers(SeedData.users)
     dao.insertPosts(SeedData.posts)
     dao.insertComments(SeedData.comments)
+    dao.insertCommentReactions(SeedData.commentReactions)
     dao.insertStories(SeedData.stories)
     dao.insertReels(SeedData.reels)
     dao.insertConversations(SeedData.conversations)
+    dao.insertConversationMembers(SeedData.conversationMembers)
     dao.insertMessages(SeedData.messages)
     dao.insertNotifications(SeedData.notifications)
     dao.insertFriendRequests(SeedData.friendRequests)
@@ -284,37 +292,277 @@ class SocivaRepository(
   }
 
   // --- Comments ---
-  fun getComments(postId: String): Flow<List<Comment>> = dao.getCommentsForPost(postId).map { list ->
-    list.map { it.toDomain() }
+  fun getComments(postId: String, currentUserId: String? = null): Flow<List<Comment>> {
+    return combine(
+      dao.getCommentsForPost(postId),
+      dao.getReactionsForPostComments(postId)
+    ) { commentEntities, reactionEntities ->
+      val reactionsByComment = reactionEntities.groupBy { it.commentId }
+
+      // Map to domain comments with reaction data
+      val domainComments = commentEntities.map { entity ->
+        val commentReactions = reactionsByComment[entity.id].orEmpty()
+        val userReaction = currentUserId?.let { uid ->
+          commentReactions.firstOrNull { it.userId == uid }?.let { r ->
+            try { ReactionType.valueOf(r.reactionType) } catch (e: Exception) { null }
+          }
+        }
+        entity.toDomain(
+          myReaction = userReaction,
+          reactionsCount = commentReactions.size
+        )
+      }
+
+      // Group replies by parentCommentId
+      val repliesByParent = domainComments
+        .filter { it.parentCommentId != null }
+        .groupBy { it.parentCommentId!! }
+
+      // Return top-level comments with their replies attached
+      domainComments
+        .filter { it.parentCommentId == null }
+        .map { topComment ->
+          val childReplies = repliesByParent[topComment.id].orEmpty()
+          topComment.copy(
+            replies = childReplies,
+            repliesCount = childReplies.size
+          )
+        }
+    }
   }
 
-  suspend fun addComment(postId: String, author: User, content: String) {
+  suspend fun addComment(
+    postId: String,
+    author: User,
+    content: String,
+    parentCommentId: String? = null
+  ): Result<Comment> {
+    if (author.id.isBlank()) {
+      return Result.failure(SecurityException("Authentication required to comment"))
+    }
+    val sanitized = content.trim().replace("\r\n", "\n").take(2000)
+    if (sanitized.isBlank()) {
+      return Result.failure(IllegalArgumentException("Comment cannot be empty"))
+    }
+
+    val now = System.currentTimeMillis()
+    val commentId = "c_" + UUID.randomUUID().toString().take(8)
+
+    var rootParentId: String? = null
+    var parentComment: CommentEntity? = null
+
+    if (parentCommentId != null) {
+      parentComment = dao.findCommentById(parentCommentId)
+      if (parentComment == null) {
+        return Result.failure(NoSuchElementException("Parent comment not found"))
+      }
+      // If parentComment is itself a reply, keep 2-level nesting under the root parent
+      rootParentId = parentComment.parentCommentId ?: parentCommentId
+    }
+
     val newComment = CommentEntity(
-      id = "c_" + UUID.randomUUID().toString().take(8),
+      id = commentId,
       postId = postId,
       authorId = author.id,
       authorName = author.fullName,
       authorAvatar = author.avatarUrl,
       isAuthorVerified = author.isVerified,
-      content = content,
-      timestamp = System.currentTimeMillis(),
+      content = sanitized,
+      timestamp = now,
+      updatedAt = now,
+      parentCommentId = rootParentId,
       likesCount = 0,
       isLiked = false
     )
     dao.insertComment(newComment)
 
-    val post = dao.getPostById(postId).first()
-    if (post != null) {
-      dao.updatePost(post.copy(commentsCount = post.commentsCount + 1))
+    // Send notifications
+    if (parentComment != null) {
+      // User replied to a comment: notify parent comment's author if not self
+      if (parentComment.authorId != author.id) {
+        dao.insertNotification(
+          NotificationEntity(
+            id = "notif_" + UUID.randomUUID().toString().take(8),
+            type = "COMMENT_REPLY",
+            actorName = author.fullName,
+            actorAvatar = author.avatarUrl,
+            isActorVerified = author.isVerified,
+            messageSnippet = "${author.fullName} replied to your comment.",
+            timestamp = now,
+            isRead = false,
+            targetPostId = postId,
+            recipientId = parentComment.authorId
+          )
+        )
+      }
+    } else {
+      // Top-level comment: notify post author if not self
+      val post = dao.findPostById(postId)
+      if (post != null && post.authorId != author.id) {
+        dao.insertNotification(
+          NotificationEntity(
+            id = "notif_" + UUID.randomUUID().toString().take(8),
+            type = "COMMENT",
+            actorName = author.fullName,
+            actorAvatar = author.avatarUrl,
+            isActorVerified = author.isVerified,
+            messageSnippet = "${author.fullName} commented on your post.",
+            timestamp = now,
+            isRead = false,
+            targetPostId = postId,
+            recipientId = post.authorId
+          )
+        )
+      }
     }
+
+    // Update post comments count with exact total
+    val totalCount = dao.countAllCommentsForPost(postId)
+    dao.updatePostCommentsCount(postId, totalCount)
+
+    return Result.success(newComment.toDomain())
   }
 
-  suspend fun deleteComment(commentId: String, postId: String) {
-    dao.deleteComment(commentId)
-    val post = dao.getPostById(postId).first()
-    if (post != null) {
-      dao.updatePost(post.copy(commentsCount = (post.commentsCount - 1).coerceAtLeast(0)))
+  suspend fun reactToComment(
+    commentId: String,
+    user: User,
+    reactionType: ReactionType
+  ): Result<ReactionType?> {
+    if (user.id.isBlank()) {
+      return Result.failure(SecurityException("Authentication required to react"))
     }
+    val comment = dao.findCommentById(commentId)
+      ?: return Result.failure(NoSuchElementException("Comment not found"))
+
+    val existing = dao.findCommentReaction(commentId, user.id)
+    val finalReaction: ReactionType?
+
+    if (existing != null && existing.reactionType == reactionType.name) {
+      // User tapped the same reaction again -> remove reaction (toggle off)
+      dao.deleteCommentReaction(commentId, user.id)
+      finalReaction = null
+    } else if (existing != null) {
+      // User changed reaction (e.g. from Like to Love) -> update reaction
+      dao.insertCommentReaction(
+        existing.copy(
+          reactionType = reactionType.name,
+          createdAt = System.currentTimeMillis()
+        )
+      )
+      finalReaction = reactionType
+    } else {
+      // New reaction
+      val now = System.currentTimeMillis()
+      dao.insertCommentReaction(
+        CommentReactionEntity(
+          id = "cr_" + UUID.randomUUID().toString().take(8),
+          commentId = commentId,
+          userId = user.id,
+          reactionType = reactionType.name,
+          createdAt = now
+        )
+      )
+      finalReaction = reactionType
+
+      // Notify comment author if not self
+      if (comment.authorId != user.id) {
+        dao.insertNotification(
+          NotificationEntity(
+            id = "notif_" + UUID.randomUUID().toString().take(8),
+            type = "COMMENT_REACTION",
+            actorName = user.fullName,
+            actorAvatar = user.avatarUrl,
+            isActorVerified = user.isVerified,
+            messageSnippet = "${user.fullName} reacted to your comment.",
+            timestamp = now,
+            isRead = false,
+            targetPostId = comment.postId,
+            recipientId = comment.authorId
+          )
+        )
+      }
+    }
+
+    // Update comment likesCount with exact count
+    val newCount = dao.countReactionsForComment(commentId)
+    dao.updateCommentLikesCount(commentId, newCount)
+
+    return Result.success(finalReaction)
+  }
+
+  suspend fun removeCommentReaction(commentId: String, userId: String): Result<Unit> {
+    if (userId.isBlank()) {
+      return Result.failure(SecurityException("Authentication required"))
+    }
+    dao.deleteCommentReaction(commentId, userId)
+    val newCount = dao.countReactionsForComment(commentId)
+    dao.updateCommentLikesCount(commentId, newCount)
+    return Result.success(Unit)
+  }
+
+  suspend fun editComment(
+    commentId: String,
+    userId: String,
+    newContent: String
+  ): Result<Comment> {
+    if (userId.isBlank()) {
+      return Result.failure(SecurityException("Authentication required"))
+    }
+    val comment = dao.findCommentById(commentId)
+      ?: return Result.failure(NoSuchElementException("Comment not found"))
+
+    if (comment.authorId != userId) {
+      return Result.failure(SecurityException("Unauthorized: Cannot edit another user's comment"))
+    }
+
+    val sanitized = newContent.trim().replace("\r\n", "\n").take(2000)
+    if (sanitized.isBlank()) {
+      return Result.failure(IllegalArgumentException("Comment cannot be empty"))
+    }
+
+    val updated = comment.copy(
+      content = sanitized,
+      updatedAt = System.currentTimeMillis()
+    )
+    dao.updateComment(updated)
+    return Result.success(updated.toDomain())
+  }
+
+  suspend fun deleteComment(
+    commentId: String,
+    postId: String,
+    userId: String? = null,
+    isPostOwnerOrAdmin: Boolean = false
+  ): Result<Unit> {
+    val comment = dao.findCommentById(commentId)
+      ?: return Result.failure(NoSuchElementException("Comment not found"))
+    val post = dao.findPostById(postId)
+
+    if (userId != null) {
+      val isAuthorized = (comment.authorId == userId) || (post != null && post.authorId == userId) || isPostOwnerOrAdmin
+      if (!isAuthorized) {
+        return Result.failure(SecurityException("Unauthorized: Cannot delete another user's comment"))
+      }
+    }
+
+    // Delete reactions for this comment
+    dao.deleteReactionsForComment(commentId)
+
+    // Delete any replies if this is a parent comment
+    val replies = dao.getRepliesForCommentList(commentId)
+    for (reply in replies) {
+      dao.deleteReactionsForComment(reply.id)
+      dao.deleteComment(reply.id)
+    }
+
+    // Delete the comment itself
+    dao.deleteComment(commentId)
+
+    // Update post comments count
+    val totalRemaining = dao.countAllCommentsForPost(postId)
+    dao.updatePostCommentsCount(postId, totalRemaining)
+
+    return Result.success(Unit)
   }
 
   // --- Stories ---
@@ -378,76 +626,145 @@ class SocivaRepository(
   }
 
   // --- Conversations & Messages ---
-  val conversations: Flow<List<Conversation>> = dao.getAllConversations().map { list ->
-    list.map { it.toDomain() }
+  private val _typingUsers = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
+
+  fun setTyping(convId: String, userId: String, isTyping: Boolean) {
+    val currentMap = _typingUsers.value.toMutableMap()
+    val set = (currentMap[convId] ?: emptySet()).toMutableSet()
+    if (isTyping) {
+      set.add(userId)
+    } else {
+      set.remove(userId)
+    }
+    currentMap[convId] = set
+    _typingUsers.value = currentMap
   }
 
-  fun getMessages(convId: String): Flow<List<Message>> = dao.getMessagesForConversation(convId).map { list ->
-    list.map { it.toDomain() }
-  }
+  fun getTypingUsers(convId: String, currentUserId: String): Flow<List<String>> =
+    _typingUsers.map { map ->
+      (map[convId] ?: emptySet()).filter { it != currentUserId }
+    }
 
-  suspend fun sendMessage(convId: String, text: String, mediaUrl: String? = null) {
+  fun getConversations(userId: String): Flow<List<Conversation>> =
+    dao.getConversationsForUser(userId).map { list ->
+      list.map { it.toDomain() }
+    }
+
+  val conversations: Flow<List<Conversation>> = getConversations("user_me")
+
+  fun getConversation(convId: String, currentUserId: String): Flow<Conversation?> =
+    getConversations(currentUserId).map { list ->
+      list.find { it.id == convId }
+    }
+
+  fun getMessages(convId: String, currentUserId: String = "user_me"): Flow<List<Message>> =
+    dao.getMessagesForConversation(convId).map { list ->
+      list.map { it.toDomain(currentUserId) }
+    }
+
+  suspend fun getOrCreateConversation(userAId: String, userBId: String): String {
+    val existing = dao.findDirectConversation(userAId, userBId)
+    if (existing != null) {
+      return existing
+    }
     val now = System.currentTimeMillis()
-    val myMsg = MessageEntity(
+    val newConvId = "conv_${UUID.randomUUID().toString().take(8)}"
+    val userB = dao.getUserById(userBId).first()
+    val newConv = ConversationEntity(
+      id = newConvId,
+      createdAt = now,
+      updatedAt = now,
+      participantId = userBId,
+      participantName = userB?.fullName ?: "",
+      participantUsername = userB?.username ?: "",
+      participantAvatar = userB?.avatarUrl ?: "",
+      isParticipantVerified = userB?.isVerified ?: false,
+      lastMessage = "",
+      lastMessageTimestamp = now,
+      unreadCount = 0,
+      isOnline = userB?.isOnline ?: false
+    )
+    dao.insertConversation(newConv)
+    dao.insertConversationMember(ConversationMemberEntity(newConvId, userAId, now, now))
+    dao.insertConversationMember(ConversationMemberEntity(newConvId, userBId, now, 0L))
+    return newConvId
+  }
+
+  suspend fun sendMessage(
+    convId: String,
+    senderId: String = "user_me",
+    text: String,
+    mediaUrl: String? = null,
+    messageType: String = "TEXT"
+  ) {
+    val now = System.currentTimeMillis()
+    val otherMember = dao.getOtherMember(convId, senderId)
+    val receiverId = otherMember?.userId ?: ""
+
+    val msg = MessageEntity(
       id = "m_" + UUID.randomUUID().toString().take(8),
       conversationId = convId,
-      senderId = "user_me",
+      senderId = senderId,
+      receiverId = receiverId,
+      messageType = messageType,
       text = text,
       mediaUrl = mediaUrl,
+      createdAt = now,
+      updatedAt = now,
       timestamp = now,
-      isSeen = true,
+      isSeen = false,
+      isDeleted = false,
       isMine = true
     )
-    dao.insertMessage(myMsg)
+    dao.insertMessage(msg)
+    dao.updateConversationLastMessage(convId, text, now)
 
-    // Update conversation last message
-    val conv = dao.getAllConversations().first().find { it.id == convId }
-    if (conv != null) {
-      dao.insertConversation(
-        conv.copy(
-          lastMessage = text,
-          lastMessageTimestamp = now
-        )
+    // Notify recipient
+    if (receiverId.isNotBlank() && receiverId != senderId) {
+      val senderUser = dao.getUserById(senderId).first()
+      val notif = NotificationEntity(
+        id = "notif_" + UUID.randomUUID().toString().take(8),
+        type = NotificationType.MESSAGE.name,
+        actorName = senderUser?.fullName ?: "Someone",
+        actorAvatar = senderUser?.avatarUrl ?: "",
+        isActorVerified = senderUser?.isVerified ?: false,
+        messageSnippet = text,
+        timestamp = now,
+        isRead = false,
+        targetPostId = convId,
+        recipientId = receiverId
       )
+      dao.insertNotification(notif)
     }
+  }
 
-    // Auto-reply simulation for real-time feel!
-    scope.launch {
-      delay(1800)
-      val replyReplies = listOf(
-        "Sounds wonderful! Looking forward to it.",
-        "Totally agree! That makes a lot of sense.",
-        "Just saw this! Awesome work on Sociva ✨",
-        "Haha exactly what I was thinking! 🙌",
-        "Thanks for sharing! Let me test that out."
-      )
-      val replyText = replyReplies.random()
-      val replyTime = System.currentTimeMillis()
-      val replyMsg = MessageEntity(
-        id = "m_" + UUID.randomUUID().toString().take(8),
-        conversationId = convId,
-        senderId = conv?.participantId ?: "other",
-        text = replyText,
-        mediaUrl = null,
-        timestamp = replyTime,
-        isSeen = true,
-        isMine = false
-      )
-      dao.insertMessage(replyMsg)
-      if (conv != null) {
-        dao.insertConversation(
-          conv.copy(
-            lastMessage = replyText,
-            lastMessageTimestamp = replyTime
-          )
-        )
-      }
-    }
+  suspend fun markConversationAsRead(convId: String, currentUserId: String) {
+    val now = System.currentTimeMillis()
+    dao.markMessagesAsSeen(convId, currentUserId, now)
+    dao.updateMemberLastRead(convId, currentUserId, now)
+  }
+
+  suspend fun softDeleteMessage(messageId: String) {
+    dao.softDeleteMessage(messageId, "This message was unsent", System.currentTimeMillis())
   }
 
   suspend fun deleteMessage(messageId: String) {
     dao.deleteMessage(messageId)
   }
+
+  suspend fun setUserPresence(userId: String, isOnline: Boolean) {
+    val now = System.currentTimeMillis()
+    dao.updateUserPresence(userId, isOnline, now)
+  }
+
+  fun getOnlineUsers(currentUserId: String): Flow<List<User>> =
+    dao.getOnlineUsers(currentUserId).map { list -> list.map { it.toDomain() } }
+
+  fun searchUsers(query: String, currentUserId: String): Flow<List<User>> =
+    dao.searchUsers(query, currentUserId).map { list -> list.map { it.toDomain() } }
+
+  fun getAllUsersExcept(currentUserId: String): Flow<List<User>> =
+    dao.getAllUsersExcept(currentUserId).map { list -> list.map { it.toDomain() } }
 
   // --- Notifications ---
   fun getNotifications(recipientId: String = "user_me"): Flow<List<NotificationItem>> =
@@ -469,6 +786,9 @@ class SocivaRepository(
 
   fun getSentFriendRequests(senderId: String = "user_me"): Flow<List<FriendRequestItem>> =
     dao.getSentFriendRequests(senderId).map { list -> list.map { it.toDomain() } }
+
+  fun getFriendRequests(userId: String = "user_me"): Flow<List<FriendRequestItem>> =
+    getIncomingFriendRequests(userId)
 
   val friendRequests: Flow<List<FriendRequestItem>> = getIncomingFriendRequests("user_me")
 
@@ -767,6 +1087,7 @@ private fun UserEntity.toDomain() = User(
   location = location,
   joinedDate = joinedDate,
   isOnline = isOnline,
+  lastActiveAt = lastActiveAt,
   isFriend = isFriend,
   isFollowing = isFollowing,
   profilePictureUpdatedAt = profilePictureUpdatedAt,
@@ -798,7 +1119,11 @@ private fun PostEntity.toDomain() = Post(
   isSaved = isSaved
 )
 
-private fun CommentEntity.toDomain() = Comment(
+private fun CommentEntity.toDomain(
+  myReaction: ReactionType? = null,
+  reactionsCount: Int = likesCount,
+  replies: List<Comment> = emptyList()
+) = Comment(
   id = id,
   postId = postId,
   authorId = authorId,
@@ -807,8 +1132,22 @@ private fun CommentEntity.toDomain() = Comment(
   isAuthorVerified = isAuthorVerified,
   content = content,
   timestamp = timestamp,
-  likesCount = likesCount,
-  isLiked = isLiked
+  updatedAt = updatedAt,
+  parentCommentId = parentCommentId,
+  likesCount = reactionsCount,
+  isLiked = myReaction != null,
+  myReaction = myReaction,
+  reactionsCount = reactionsCount,
+  repliesCount = replies.size,
+  replies = replies
+)
+
+private fun CommentReactionEntity.toDomain() = CommentReaction(
+  id = id,
+  commentId = commentId,
+  userId = userId,
+  reactionType = try { ReactionType.valueOf(reactionType) } catch (e: Exception) { ReactionType.LIKE },
+  createdAt = createdAt
 )
 
 private fun StoryEntity.toDomain() = Story(
@@ -854,18 +1193,36 @@ private fun ConversationEntity.toDomain() = Conversation(
   lastMessage = lastMessage,
   lastMessageTimestamp = lastMessageTimestamp,
   unreadCount = unreadCount,
-  isOnline = isOnline
+  isOnline = isOnline,
+  lastActiveAt = 0L
 )
 
-private fun MessageEntity.toDomain() = Message(
+private fun ConversationWithParticipant.toDomain() = Conversation(
+  id = conversationId,
+  participantId = participantId,
+  participantName = participantName,
+  participantUsername = participantUsername,
+  participantAvatar = participantAvatar,
+  isParticipantVerified = isParticipantVerified,
+  lastMessage = lastMessage,
+  lastMessageTimestamp = lastMessageTimestamp,
+  unreadCount = unreadCount,
+  isOnline = isOnline,
+  lastActiveAt = lastActiveAt
+)
+
+private fun MessageEntity.toDomain(currentUserId: String = "user_me") = Message(
   id = id,
   conversationId = conversationId,
   senderId = senderId,
+  receiverId = receiverId,
+  messageType = messageType,
   text = text,
   mediaUrl = mediaUrl,
   timestamp = timestamp,
   isSeen = isSeen,
-  isMine = isMine
+  isDeleted = isDeleted,
+  isMine = (senderId == currentUserId)
 )
 
 private fun NotificationEntity.toDomain() = NotificationItem(

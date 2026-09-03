@@ -111,8 +111,8 @@ fun NotificationRow(
   onClick: () -> Unit
 ) {
   val typeIcon = when (item.type) {
-    NotificationType.LIKE, NotificationType.STORY_REACTION -> Icons.Default.Favorite
-    NotificationType.COMMENT -> Icons.Default.Comment
+    NotificationType.LIKE, NotificationType.STORY_REACTION, NotificationType.COMMENT_REACTION -> Icons.Default.Favorite
+    NotificationType.COMMENT, NotificationType.COMMENT_REPLY -> Icons.Default.Comment
     NotificationType.SHARE -> Icons.Default.Share
     NotificationType.FRIEND_REQUEST, NotificationType.ACCEPT_REQUEST -> Icons.Default.PersonAdd
     NotificationType.FOLLOW -> Icons.Default.AddCircle
@@ -121,8 +121,8 @@ fun NotificationRow(
   }
 
   val typeColor = when (item.type) {
-    NotificationType.LIKE, NotificationType.STORY_REACTION -> SocivaPink
-    NotificationType.COMMENT -> SocivaBlue
+    NotificationType.LIKE, NotificationType.STORY_REACTION, NotificationType.COMMENT_REACTION -> SocivaPink
+    NotificationType.COMMENT, NotificationType.COMMENT_REPLY -> SocivaBlue
     NotificationType.SHARE -> SocivaBlue
     NotificationType.FRIEND_REQUEST, NotificationType.ACCEPT_REQUEST -> Color(0xFF10B981)
     NotificationType.FOLLOW -> SocivaPurple

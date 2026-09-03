@@ -229,8 +229,38 @@ object SeedData {
       isAuthorVerified = true,
       content = "The lighting in that first shot is unreal Sarah! Need to visit Lake Serene next month.",
       timestamp = now - (1000 * 60 * 18),
+      updatedAt = now - (1000 * 60 * 18),
+      parentCommentId = null,
       likesCount = 14,
       isLiked = true
+    ),
+    CommentEntity(
+      id = "c_1_rep_1",
+      postId = "post_1",
+      authorId = "user_sarah",
+      authorName = "Sarah Chen",
+      authorAvatar = "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300&h=300&fit=crop",
+      isAuthorVerified = true,
+      content = "@Alex Rivera Thank you Alex! Definitely let me know when you go, I know some secret viewpoint spots!",
+      timestamp = now - (1000 * 60 * 15),
+      updatedAt = now - (1000 * 60 * 15),
+      parentCommentId = "c_1",
+      likesCount = 5,
+      isLiked = true
+    ),
+    CommentEntity(
+      id = "c_1_rep_2",
+      postId = "post_1",
+      authorId = "user_maya",
+      authorName = "Maya Patel",
+      authorAvatar = "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300&h=300&fit=crop",
+      isAuthorVerified = true,
+      content = "Count me in for the hike as well! 🌄",
+      timestamp = now - (1000 * 60 * 10),
+      updatedAt = now - (1000 * 60 * 10),
+      parentCommentId = "c_1",
+      likesCount = 2,
+      isLiked = false
     ),
     CommentEntity(
       id = "c_2",
@@ -241,7 +271,23 @@ object SeedData {
       isAuthorVerified = true,
       content = "Those reflections are pure magic. Did you use an ND filter?",
       timestamp = now - (1000 * 60 * 12),
+      updatedAt = now - (1000 * 60 * 12),
+      parentCommentId = null,
       likesCount = 6,
+      isLiked = false
+    ),
+    CommentEntity(
+      id = "c_2_rep_1",
+      postId = "post_1",
+      authorId = "user_sarah",
+      authorName = "Sarah Chen",
+      authorAvatar = "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300&h=300&fit=crop",
+      isAuthorVerified = true,
+      content = "@Maya Patel Yes! 6-stop ND filter and a tripod for the calm water effect.",
+      timestamp = now - (1000 * 60 * 8),
+      updatedAt = now - (1000 * 60 * 8),
+      parentCommentId = "c_2",
+      likesCount = 3,
       isLiked = false
     ),
     CommentEntity(
@@ -253,6 +299,8 @@ object SeedData {
       isAuthorVerified = true,
       content = "Congratulations Alex! The fluidity of the UI and the purple gradients look stunning.",
       timestamp = now - (1000 * 60 * 60),
+      updatedAt = now - (1000 * 60 * 60),
+      parentCommentId = null,
       likesCount = 28,
       isLiked = true
     ),
@@ -265,8 +313,41 @@ object SeedData {
       isAuthorVerified = true,
       content = "This color palette has such great rhythm. Would make an amazing album sleeve too!",
       timestamp = now - (1000 * 60 * 200),
+      updatedAt = now - (1000 * 60 * 200),
+      parentCommentId = null,
       likesCount = 11,
       isLiked = false
+    )
+  )
+
+  val commentReactions = listOf(
+    CommentReactionEntity(
+      id = "cr_1",
+      commentId = "c_1",
+      userId = "user_me",
+      reactionType = "LOVE",
+      createdAt = now - (1000 * 60 * 16)
+    ),
+    CommentReactionEntity(
+      id = "cr_2",
+      commentId = "c_1",
+      userId = "user_sarah",
+      reactionType = "LIKE",
+      createdAt = now - (1000 * 60 * 15)
+    ),
+    CommentReactionEntity(
+      id = "cr_3",
+      commentId = "c_1_rep_1",
+      userId = "user_me",
+      reactionType = "LOVE",
+      createdAt = now - (1000 * 60 * 14)
+    ),
+    CommentReactionEntity(
+      id = "cr_4",
+      commentId = "c_2",
+      userId = "user_sarah",
+      reactionType = "LIKE",
+      createdAt = now - (1000 * 60 * 9)
     )
   )
 
@@ -465,11 +546,23 @@ object SeedData {
     )
   )
 
+  val conversationMembers = listOf(
+    ConversationMemberEntity(conversationId = "conv_sarah", userId = "user_me", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now - (1000 * 60 * 15)),
+    ConversationMemberEntity(conversationId = "conv_sarah", userId = "user_sarah", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now - (1000 * 60 * 8)),
+    ConversationMemberEntity(conversationId = "conv_marcus", userId = "user_me", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now),
+    ConversationMemberEntity(conversationId = "conv_marcus", userId = "user_marcus", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now - (1000 * 60 * 42)),
+    ConversationMemberEntity(conversationId = "conv_maya", userId = "user_me", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now),
+    ConversationMemberEntity(conversationId = "conv_maya", userId = "user_maya", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now - (1000 * 60 * 120)),
+    ConversationMemberEntity(conversationId = "conv_david", userId = "user_me", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now),
+    ConversationMemberEntity(conversationId = "conv_david", userId = "user_david", joinedAt = now - (1000 * 60 * 60 * 24), lastReadAt = now - (1000 * 60 * 360))
+  )
+
   val messages = listOf(
     MessageEntity(
       id = "m_1",
       conversationId = "conv_sarah",
       senderId = "user_me",
+      receiverId = "user_sarah",
       text = "Hey Sarah! Saw your Lake Serene photos, they look absolutely breathtaking.",
       mediaUrl = null,
       timestamp = now - (1000 * 60 * 30),
@@ -480,6 +573,7 @@ object SeedData {
       id = "m_2",
       conversationId = "conv_sarah",
       senderId = "user_sarah",
+      receiverId = "user_me",
       text = "Thank you Alex! It was worth waking up at 4am to catch that morning haze.",
       mediaUrl = null,
       timestamp = now - (1000 * 60 * 20),
@@ -490,6 +584,7 @@ object SeedData {
       id = "m_3",
       conversationId = "conv_sarah",
       senderId = "user_me",
+      receiverId = "user_sarah",
       text = "Are you still open to using one of them as a backdrop for the community spotlight banner?",
       mediaUrl = null,
       timestamp = now - (1000 * 60 * 15),
@@ -500,10 +595,55 @@ object SeedData {
       id = "m_4",
       conversationId = "conv_sarah",
       senderId = "user_sarah",
+      receiverId = "user_me",
       text = "Yes! I'll send over the RAW files for the design assets tonight.",
       mediaUrl = null,
       timestamp = now - (1000 * 60 * 8),
       isSeen = false,
+      isMine = false
+    ),
+    MessageEntity(
+      id = "m_marcus_1",
+      conversationId = "conv_marcus",
+      senderId = "user_me",
+      receiverId = "user_marcus",
+      text = "Hey Marcus, how is the new track coming along?",
+      mediaUrl = null,
+      timestamp = now - (1000 * 60 * 60),
+      isSeen = true,
+      isMine = true
+    ),
+    MessageEntity(
+      id = "m_marcus_2",
+      conversationId = "conv_marcus",
+      senderId = "user_marcus",
+      receiverId = "user_me",
+      text = "Check out the opening synth stabs in the new mix 🎧",
+      mediaUrl = null,
+      timestamp = now - (1000 * 60 * 42),
+      isSeen = true,
+      isMine = false
+    ),
+    MessageEntity(
+      id = "m_maya_1",
+      conversationId = "conv_maya",
+      senderId = "user_maya",
+      receiverId = "user_me",
+      text = "Love the new post composer animations on Sociva! So snappy.",
+      mediaUrl = null,
+      timestamp = now - (1000 * 60 * 120),
+      isSeen = true,
+      isMine = false
+    ),
+    MessageEntity(
+      id = "m_david_1",
+      conversationId = "conv_david",
+      senderId = "user_david",
+      receiverId = "user_me",
+      text = "Saved a bag of the anaerobic roast for you next time you stop by!",
+      mediaUrl = null,
+      timestamp = now - (1000 * 60 * 360),
+      isSeen = true,
       isMine = false
     )
   )

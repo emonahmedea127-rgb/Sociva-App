@@ -214,7 +214,7 @@ fun FriendsScreen(
               items(filteredFriends, key = { it.id }) { friend ->
                 FriendItemRow(
                   friend = friend,
-                  onMessage = { viewModel.navigateToChat("conv_sarah") },
+                  onMessage = { viewModel.openOrCreateConversationWithUser(friend.id) },
                   onRemove = { friendToRemove = friend },
                   onClick = { viewModel.navigateToProfile(friend.id) }
                 )

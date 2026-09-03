@@ -1,5 +1,6 @@
 package com.example.sociva.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -22,6 +23,7 @@ data class UserEntity(
   val location: String = "",
   val joinedDate: String = "September 2024",
   val isOnline: Boolean = false,
+  val lastActiveAt: Long = 0L,
   val isFriend: Boolean = false,
   val isFollowing: Boolean = false,
   val profilePictureUpdatedAt: Long = 0L,
@@ -48,18 +50,43 @@ data class PostEntity(
   val isSaved: Boolean = false
 )
 
-@Entity(tableName = "comments")
+@Entity(
+  tableName = "comments",
+  indices = [
+    Index(value = ["post_id"]),
+    Index(value = ["parent_comment_id"]),
+    Index(value = ["user_id"])
+  ]
+)
 data class CommentEntity(
   @PrimaryKey val id: String,
-  val postId: String,
-  val authorId: String,
+  @ColumnInfo(name = "post_id") val postId: String,
+  @ColumnInfo(name = "user_id") val authorId: String,
   val authorName: String,
   val authorAvatar: String,
   val isAuthorVerified: Boolean = false,
   val content: String,
-  val timestamp: Long,
+  @ColumnInfo(name = "created_at") val timestamp: Long,
+  @ColumnInfo(name = "updated_at") val updatedAt: Long = timestamp,
+  @ColumnInfo(name = "parent_comment_id") val parentCommentId: String? = null,
   val likesCount: Int = 0,
   val isLiked: Boolean = false
+)
+
+@Entity(
+  tableName = "comment_reactions",
+  indices = [
+    Index(value = ["comment_id", "user_id"], unique = true),
+    Index(value = ["comment_id"]),
+    Index(value = ["user_id"])
+  ]
+)
+data class CommentReactionEntity(
+  @PrimaryKey val id: String,
+  @ColumnInfo(name = "comment_id") val commentId: String,
+  @ColumnInfo(name = "user_id") val userId: String,
+  @ColumnInfo(name = "reaction_type") val reactionType: String,
+  @ColumnInfo(name = "created_at") val createdAt: Long
 )
 
 @Entity(tableName = "stories")
@@ -100,27 +127,71 @@ data class ReelEntity(
 @Entity(tableName = "conversations")
 data class ConversationEntity(
   @PrimaryKey val id: String,
-  val participantId: String,
-  val participantName: String,
-  val participantUsername: String,
-  val participantAvatar: String,
+  val createdAt: Long = System.currentTimeMillis(),
+  val updatedAt: Long = System.currentTimeMillis(),
+  val participantId: String = "",
+  val participantName: String = "",
+  val participantUsername: String = "",
+  val participantAvatar: String = "",
   val isParticipantVerified: Boolean = false,
-  val lastMessage: String,
-  val lastMessageTimestamp: Long,
+  val lastMessage: String = "",
+  val lastMessageTimestamp: Long = System.currentTimeMillis(),
   val unreadCount: Int = 0,
-  val isOnline: Boolean = true
+  val isOnline: Boolean = false
 )
 
-@Entity(tableName = "messages")
+@Entity(
+  tableName = "conversation_members",
+  primaryKeys = ["conversationId", "userId"],
+  indices = [
+    Index(value = ["conversationId"]),
+    Index(value = ["userId"])
+  ]
+)
+data class ConversationMemberEntity(
+  val conversationId: String,
+  val userId: String,
+  val joinedAt: Long = System.currentTimeMillis(),
+  val lastReadAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+  tableName = "messages",
+  indices = [
+    Index(value = ["conversationId"]),
+    Index(value = ["senderId"]),
+    Index(value = ["receiverId"]),
+    Index(value = ["timestamp"])
+  ]
+)
 data class MessageEntity(
   @PrimaryKey val id: String,
   val conversationId: String,
   val senderId: String,
+  val receiverId: String = "",
+  val messageType: String = "TEXT",
   val text: String,
   val mediaUrl: String? = null,
-  val timestamp: Long,
-  val isSeen: Boolean = true,
+  val createdAt: Long = System.currentTimeMillis(),
+  val updatedAt: Long = System.currentTimeMillis(),
+  val timestamp: Long = System.currentTimeMillis(),
+  val isSeen: Boolean = false,
+  val isDeleted: Boolean = false,
   val isMine: Boolean = true
+)
+
+data class ConversationWithParticipant(
+  val conversationId: String,
+  val lastMessage: String,
+  val lastMessageTimestamp: Long,
+  val participantId: String,
+  val participantName: String,
+  val participantUsername: String,
+  val participantAvatar: String,
+  val isParticipantVerified: Boolean,
+  val isOnline: Boolean,
+  val lastActiveAt: Long,
+  val unreadCount: Int
 )
 
 @Entity(tableName = "notifications")
