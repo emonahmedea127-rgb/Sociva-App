@@ -1,0 +1,850 @@
+package com.example.sociva.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.sociva.data.model.*
+import com.example.sociva.ui.SocivaViewModel
+import com.example.sociva.ui.components.*
+import com.example.ui.theme.*
+
+@Composable
+fun HomeScreen(
+  viewModel: SocivaViewModel,
+  modifier: Modifier = Modifier
+) {
+  val posts by viewModel.allPosts.collectAsState()
+  val stories by viewModel.activeStories.collectAsState()
+  val currentUser by viewModel.currentUser.collectAsState()
+
+  LazyColumn(
+    modifier = modifier
+      .fillMaxSize()
+      .testTag("home_feed_list"),
+    contentPadding = PaddingValues(bottom = 80.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp)
+  ) {
+    // 1. Post Composer Card
+    item {
+      PostComposerPromptCard(
+        currentUser = currentUser,
+        onOpenComposer = { viewModel.navigateTo(com.example.sociva.ui.SocivaScreen.CREATE_POST) }
+      )
+    }
+
+    // 2. Stories Carousel
+    item {
+      StoriesSection(
+        stories = stories,
+        currentUser = currentUser,
+        onCreateStory = { viewModel.navigateTo(com.example.sociva.ui.SocivaScreen.CREATE_POST) },
+        onStoryClick = { index -> viewModel.openStoryViewer(index) }
+      )
+    }
+
+    // 3. Feed Posts
+    items(posts, key = { it.id }) { post ->
+      PostCard(
+        post = post,
+        currentUser = currentUser,
+        onReaction = { reaction -> viewModel.setReaction(post.id, reaction) },
+        onCommentClick = { viewModel.openComments(post.id) },
+        onShareClick = { viewModel.sharePost(post.id) },
+        onSaveClick = { viewModel.toggleSavePost(post.id) },
+        onAuthorClick = { viewModel.navigateToProfile(post.authorId) },
+        onDeleteClick = { viewModel.deletePost(post.id) },
+        onReportClick = {
+          viewModel.submitReport("Post", post.id, post.content.take(40), "Inappropriate or spam content")
+        }
+      )
+    }
+  }
+}
+
+@Composable
+fun PostComposerPromptCard(
+  currentUser: User?,
+  onOpenComposer: () -> Unit
+) {
+  Card(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 12.dp, vertical = 6.dp)
+      .testTag("home_post_composer_card"),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+  ) {
+    Column(modifier = Modifier.padding(14.dp)) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        UserAvatar(
+          avatarUrl = currentUser?.avatarUrl,
+          name = currentUser?.fullName ?: "User",
+          size = 42.dp
+        )
+
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .height(42.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable { onOpenComposer() }
+            .padding(horizontal = 16.dp),
+          contentAlignment = Alignment.CenterStart
+        ) {
+          Text(
+            text = "What's on your mind, ${currentUser?.fullName?.substringBefore(" ") ?: "there"}?",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+          )
+        }
+      }
+
+      HorizontalDivider(
+        modifier = Modifier.padding(vertical = 12.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+      )
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        ComposerActionButton(
+          icon = Icons.Default.PhotoLibrary,
+          iconTint = Color(0xFF10B981),
+          label = "Photo/Video",
+          onClick = onOpenComposer
+        )
+
+        ComposerActionButton(
+          icon = Icons.Default.SentimentSatisfiedAlt,
+          iconTint = Color(0xFFF59E0B),
+          label = "Feeling/Activity",
+          onClick = onOpenComposer
+        )
+
+        ComposerActionButton(
+          icon = Icons.Default.AutoAwesome,
+          iconTint = SocivaPurple,
+          label = "Story",
+          onClick = onOpenComposer
+        )
+      }
+    }
+  }
+}
+
+@Composable
+fun ComposerActionButton(
+  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  iconTint: Color,
+  label: String,
+  onClick: () -> Unit
+) {
+  Row(
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(6.dp),
+    modifier = Modifier
+      .clip(RoundedCornerShape(12.dp))
+      .clickable { onClick() }
+      .padding(horizontal = 10.dp, vertical = 6.dp)
+  ) {
+    Icon(
+      imageVector = icon,
+      contentDescription = label,
+      tint = iconTint,
+      modifier = Modifier.size(20.dp)
+    )
+    Text(
+      text = label,
+      style = MaterialTheme.typography.labelMedium,
+      fontWeight = FontWeight.Medium,
+      color = MaterialTheme.colorScheme.onSurface
+    )
+  }
+}
+
+@Composable
+fun StoriesSection(
+  stories: List<Story>,
+  currentUser: User?,
+  onCreateStory: () -> Unit,
+  onStoryClick: (Int) -> Unit
+) {
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .background(MaterialTheme.colorScheme.surface)
+      .padding(vertical = 12.dp)
+  ) {
+    Text(
+      text = "Stories",
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.onSurface,
+      modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+    )
+
+    LazyRow(
+      contentPadding = PaddingValues(horizontal = 12.dp),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      modifier = Modifier.padding(top = 8.dp)
+    ) {
+      // 1. Create Story Tile
+      item {
+        CreateStoryCard(currentUser = currentUser, onClick = onCreateStory)
+      }
+
+      // 2. Active Stories
+      itemsIndexed(stories) { index, story ->
+        StoryItemCard(
+          story = story,
+          onClick = { onStoryClick(index) }
+        )
+      }
+    }
+  }
+}
+
+@Composable
+fun CreateStoryCard(
+  currentUser: User?,
+  onClick: () -> Unit
+) {
+  Card(
+    modifier = Modifier
+      .width(115.dp)
+      .height(180.dp)
+      .clip(RoundedCornerShape(16.dp))
+      .clickable { onClick() }
+      .testTag("create_story_card"),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+  ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+      // Top image / avatar
+      if (!currentUser?.coverUrl.isNullOrBlank()) {
+        AsyncImage(
+          model = ImageRequest.Builder(LocalContext.current)
+            .data(currentUser?.avatarUrl)
+            .crossfade(true)
+            .build(),
+          contentDescription = "User Avatar",
+          contentScale = ContentScale.Crop,
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(125.dp)
+        )
+      } else {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(125.dp)
+            .background(
+              Brush.verticalGradient(
+                listOf(SocivaBlue, SocivaPurple)
+              )
+            )
+        )
+      }
+
+      // Plus Button in center overlapping bottom area
+      Box(
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .offset(y = (-40).dp)
+          .size(34.dp)
+          .clip(CircleShape)
+          .background(SocivaBlue)
+          .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+        contentAlignment = Alignment.Center
+      ) {
+        Icon(
+          imageVector = Icons.Default.Add,
+          contentDescription = "Add Story",
+          tint = Color.White,
+          modifier = Modifier.size(20.dp)
+        )
+      }
+
+      Text(
+        text = "Create Story",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(bottom = 12.dp)
+      )
+    }
+  }
+}
+
+@Composable
+fun StoryItemCard(
+  story: Story,
+  onClick: () -> Unit
+) {
+  val gradients = listOf(
+    listOf(SocivaIndigo, SocivaPurple),
+    listOf(SocivaPurple, SocivaPink),
+    listOf(SocivaIndigo, Color(0xFF06B6D4)),
+    listOf(SocivaPink, Color(0xFFF43F5E)),
+    listOf(SocivaGreen, Color(0xFF06B6D4))
+  )
+  val currentGradient = gradients[story.backgroundGradientIndex % gradients.size]
+
+  Card(
+    modifier = Modifier
+      .width(115.dp)
+      .height(180.dp)
+      .clip(RoundedCornerShape(16.dp))
+      .clickable { onClick() }
+      .testTag("story_card_${story.id}"),
+    shape = RoundedCornerShape(16.dp),
+    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+  ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+      if (!story.mediaUrl.isNullOrBlank()) {
+        AsyncImage(
+          model = ImageRequest.Builder(LocalContext.current)
+            .data(story.mediaUrl)
+            .crossfade(true)
+            .build(),
+          contentDescription = "Story preview",
+          contentScale = ContentScale.Crop,
+          modifier = Modifier.fillMaxSize()
+        )
+      } else {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(currentGradient))
+            .padding(10.dp),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = story.textOverlay,
+            color = Color.White,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
+      }
+
+      // Dim overlay gradient at top and bottom for readability
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(
+            Brush.verticalGradient(
+              colors = listOf(
+                Color.Black.copy(alpha = 0.4f),
+                Color.Transparent,
+                Color.Black.copy(alpha = 0.6f)
+              )
+            )
+          )
+      )
+
+      // User avatar at top left with story ring
+      UserAvatar(
+        avatarUrl = story.userAvatar,
+        name = story.userName,
+        size = 36.dp,
+        hasStoryRing = true,
+        storyRingViewed = story.isViewed,
+        modifier = Modifier
+          .align(Alignment.TopStart)
+          .padding(8.dp)
+      )
+
+      // Author name at bottom
+      Text(
+        text = story.userName,
+        color = Color.White,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+          .align(Alignment.BottomStart)
+          .padding(8.dp)
+      )
+    }
+  }
+}
+
+@Composable
+fun PostCard(
+  post: Post,
+  currentUser: User?,
+  onReaction: (ReactionType) -> Unit,
+  onCommentClick: () -> Unit,
+  onShareClick: () -> Unit,
+  onSaveClick: () -> Unit,
+  onAuthorClick: () -> Unit,
+  onDeleteClick: () -> Unit,
+  onReportClick: () -> Unit
+) {
+  var showMenu by remember { mutableStateOf(false) }
+  var showReactionPicker by remember { mutableStateOf(false) }
+
+  Card(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 10.dp)
+      .testTag("post_card_${post.id}"),
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+  ) {
+    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+      // Header: Avatar, Name, Verification, Timestamp, Audience, Menu
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        UserAvatar(
+          avatarUrl = post.authorAvatar,
+          name = post.authorName,
+          size = 42.dp,
+          onClick = onAuthorClick
+        )
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              text = post.authorName,
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface,
+              modifier = Modifier.clickable { onAuthorClick() }
+            )
+            if (post.isAuthorVerified) {
+              Spacer(modifier = Modifier.width(4.dp))
+              VerifiedBadge(size = 14.dp)
+            }
+          }
+
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+          ) {
+            Text(
+              text = formatRelativeTime(post.timestamp),
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+              text = "•",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Icon(
+              imageVector = when (post.audience) {
+                PostAudience.FRIENDS -> Icons.Default.Group
+                PostAudience.ONLY_ME -> Icons.Default.Lock
+                else -> Icons.Default.Public
+              },
+              contentDescription = post.audience.label,
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(12.dp)
+            )
+          }
+        }
+
+        // More Options Menu
+        Box {
+          IconButton(onClick = { showMenu = true }) {
+            Icon(
+              imageVector = Icons.Default.MoreHoriz,
+              contentDescription = "Post options",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false }
+          ) {
+            DropdownMenuItem(
+              text = { Text(if (post.isSaved) "Remove from Saved" else "Save Post") },
+              leadingIcon = {
+                Icon(
+                  if (post.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                  contentDescription = null
+                )
+              },
+              onClick = {
+                showMenu = false
+                onSaveClick()
+              }
+            )
+            DropdownMenuItem(
+              text = { Text("Report Post") },
+              leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null) },
+              onClick = {
+                showMenu = false
+                onReportClick()
+              }
+            )
+            if (post.authorId == currentUser?.id) {
+              DropdownMenuItem(
+                text = { Text("Delete Post", color = MaterialTheme.colorScheme.error) },
+                leadingIcon = {
+                  Icon(
+                    Icons.Outlined.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                  )
+                },
+                onClick = {
+                  showMenu = false
+                  onDeleteClick()
+                }
+              )
+            }
+          }
+        }
+      }
+
+      // Feeling / Activity Badge
+      if (!post.feelingOrActivity.isNullOrBlank()) {
+        Row(
+          modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = post.feelingOrActivity,
+            style = MaterialTheme.typography.labelMedium,
+            color = SocivaPurple,
+            fontWeight = FontWeight.Medium
+          )
+        }
+      }
+
+      // Post Content Text
+      if (post.content.isNotBlank()) {
+        Text(
+          text = post.content,
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+        )
+      }
+
+      // Post Media (Single image or multi-image grid)
+      if (post.mediaUrls.isNotEmpty()) {
+        PostMediaGallery(mediaUrls = post.mediaUrls)
+      }
+
+      // Stats Bar: Reactions, Comments, Shares
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        if (post.likesCount > 0) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+          ) {
+            Text(
+              text = post.myReaction?.emoji ?: "👍",
+              fontSize = 14.sp
+            )
+            Text(
+              text = "${post.likesCount}",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        } else {
+          Spacer(modifier = Modifier.width(1.dp))
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          if (post.commentsCount > 0) {
+            Text(
+              text = "${post.commentsCount} comments",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+          if (post.sharesCount > 0) {
+            Text(
+              text = "${post.sharesCount} shares",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+        }
+      }
+
+      HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 12.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+      )
+
+      // Action Buttons Row: Like, Comment, Share, Bookmark
+      Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+          horizontalArrangement = Arrangement.SpaceAround,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          // Like Button with long press / click
+          Box {
+            if (post.myReaction != null) {
+              Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFFEEF2FF),
+                modifier = Modifier
+                  .clickable { onReaction(post.myReaction) }
+                  .testTag("post_like_button_${post.id}")
+              ) {
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                  Text(text = post.myReaction.emoji, fontSize = 16.sp)
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Text(
+                    text = post.myReaction.label,
+                    color = SocivaIndigo,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium
+                  )
+                }
+              }
+            } else {
+              TextButton(
+                onClick = { showReactionPicker = true },
+                modifier = Modifier.testTag("post_like_button_${post.id}")
+              ) {
+                Icon(
+                  imageVector = Icons.Outlined.ThumbUp,
+                  contentDescription = "Like",
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = "Like",
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  style = MaterialTheme.typography.labelMedium
+                )
+              }
+            }
+          }
+
+          TextButton(
+            onClick = onCommentClick,
+            modifier = Modifier.testTag("post_comment_button_${post.id}")
+          ) {
+            Icon(
+              imageVector = Icons.Outlined.ChatBubbleOutline,
+              contentDescription = "Comment",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+              text = "Comment",
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              style = MaterialTheme.typography.labelMedium
+            )
+          }
+
+          TextButton(
+            onClick = onShareClick,
+            modifier = Modifier.testTag("post_share_button_${post.id}")
+          ) {
+            Icon(
+              imageVector = Icons.Outlined.Share,
+              contentDescription = "Share",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+              text = "Share",
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              style = MaterialTheme.typography.labelMedium
+            )
+          }
+
+          IconButton(
+            onClick = onSaveClick,
+            modifier = Modifier.testTag("post_save_button_${post.id}")
+          ) {
+            Icon(
+              imageVector = if (post.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+              contentDescription = "Save Post",
+              tint = if (post.isSaved) SocivaBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(20.dp)
+            )
+          }
+        }
+
+        // Reaction picker overlay
+        if (showReactionPicker) {
+          ReactionPickerPopup(
+            onSelectReaction = { reaction ->
+              onReaction(reaction)
+              showReactionPicker = false
+            },
+            onDismiss = { showReactionPicker = false },
+            modifier = Modifier
+              .align(Alignment.TopStart)
+              .offset(y = (-45).dp, x = 16.dp)
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+fun PostMediaGallery(mediaUrls: List<String>) {
+  when (mediaUrls.size) {
+    1 -> {
+      AsyncImage(
+        model = ImageRequest.Builder(LocalContext.current)
+          .data(mediaUrls[0])
+          .crossfade(true)
+          .build(),
+        contentDescription = "Post photo",
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(min = 200.dp, max = 340.dp)
+      )
+    }
+    2 -> {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(220.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+      ) {
+        AsyncImage(
+          model = ImageRequest.Builder(LocalContext.current)
+            .data(mediaUrls[0])
+            .crossfade(true)
+            .build(),
+          contentDescription = "Photo 1",
+          contentScale = ContentScale.Crop,
+          modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+        )
+        AsyncImage(
+          model = ImageRequest.Builder(LocalContext.current)
+            .data(mediaUrls[1])
+            .crossfade(true)
+            .build(),
+          contentDescription = "Photo 2",
+          contentScale = ContentScale.Crop,
+          modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+        )
+      }
+    }
+    else -> {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(280.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+      ) {
+        AsyncImage(
+          model = ImageRequest.Builder(LocalContext.current)
+            .data(mediaUrls[0])
+            .crossfade(true)
+            .build(),
+          contentDescription = "Main photo",
+          contentScale = ContentScale.Crop,
+          modifier = Modifier
+            .fillMaxWidth()
+            .weight(1.3f)
+        )
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f),
+          horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+          AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+              .data(mediaUrls[1])
+              .crossfade(true)
+              .build(),
+            contentDescription = "Photo 2",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+              .weight(1f)
+              .fillMaxHeight()
+          )
+          AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+              .data(mediaUrls[2])
+              .crossfade(true)
+              .build(),
+            contentDescription = "Photo 3",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+              .weight(1f)
+              .fillMaxHeight()
+          )
+        }
+      }
+    }
+  }
+}

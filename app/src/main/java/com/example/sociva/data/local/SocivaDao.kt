@@ -1,0 +1,286 @@
+package com.example.sociva.data.local
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface SocivaDao {
+
+  // Users
+  @Query("SELECT * FROM users ORDER BY fullName ASC")
+  fun getAllUsers(): Flow<List<UserEntity>>
+
+  @Query("SELECT * FROM users WHERE id = :userId LIMIT 1")
+  fun getUserById(userId: String): Flow<UserEntity?>
+
+  @Query("SELECT * FROM users WHERE isFriend = 1")
+  fun getFriends(): Flow<List<UserEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertUsers(users: List<UserEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertUser(user: UserEntity)
+
+  @Update
+  suspend fun updateUser(user: UserEntity)
+
+  @Query("UPDATE users SET avatarUrl = :avatarUrl, profilePictureUpdatedAt = :timestamp WHERE id = :userId")
+  suspend fun updateUserAvatar(userId: String, avatarUrl: String, timestamp: Long)
+
+  @Query("UPDATE users SET coverUrl = :coverUrl, coverPhotoUpdatedAt = :timestamp WHERE id = :userId")
+  suspend fun updateUserCover(userId: String, coverUrl: String, timestamp: Long)
+
+  @Query("UPDATE posts SET authorAvatar = :avatarUrl WHERE authorId = :userId")
+  suspend fun updateAuthorAvatarInPosts(userId: String, avatarUrl: String)
+
+  @Query("UPDATE comments SET authorAvatar = :avatarUrl WHERE authorId = :userId")
+  suspend fun updateAuthorAvatarInComments(userId: String, avatarUrl: String)
+
+  @Query("UPDATE stories SET userAvatar = :avatarUrl WHERE userId = :userId")
+  suspend fun updateUserAvatarInStories(userId: String, avatarUrl: String)
+
+  @Query("UPDATE reels SET creatorAvatar = :avatarUrl WHERE creatorId = :userId")
+  suspend fun updateCreatorAvatarInReels(userId: String, avatarUrl: String)
+
+  @Query("UPDATE conversations SET participantAvatar = :avatarUrl WHERE participantId = :userId")
+  suspend fun updateParticipantAvatarInConversations(userId: String, avatarUrl: String)
+
+  @Query("UPDATE notifications SET actorAvatar = :avatarUrl WHERE actorName = :actorName")
+  suspend fun updateActorAvatarInNotifications(actorName: String, avatarUrl: String)
+
+  // Posts
+  @Query("SELECT * FROM posts ORDER BY timestamp DESC")
+  fun getAllPosts(): Flow<List<PostEntity>>
+
+  @Query("SELECT * FROM posts WHERE id = :postId LIMIT 1")
+  fun getPostById(postId: String): Flow<PostEntity?>
+
+  @Query("SELECT * FROM posts WHERE authorId = :userId ORDER BY timestamp DESC")
+  fun getPostsByAuthor(userId: String): Flow<List<PostEntity>>
+
+  @Query("SELECT * FROM posts WHERE isSaved = 1 ORDER BY timestamp DESC")
+  fun getSavedPosts(): Flow<List<PostEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPosts(posts: List<PostEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPost(post: PostEntity)
+
+  @Update
+  suspend fun updatePost(post: PostEntity)
+
+  @Query("DELETE FROM posts WHERE id = :postId")
+  suspend fun deletePostById(postId: String)
+
+  // Comments
+  @Query("SELECT * FROM comments WHERE postId = :postId ORDER BY timestamp ASC")
+  fun getCommentsForPost(postId: String): Flow<List<CommentEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertComments(comments: List<CommentEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertComment(comment: CommentEntity)
+
+  @Query("DELETE FROM comments WHERE id = :commentId")
+  suspend fun deleteComment(commentId: String)
+
+  // Stories
+  @Query("SELECT * FROM stories WHERE expiresAt > :currentTime ORDER BY timestamp DESC")
+  fun getActiveStories(currentTime: Long): Flow<List<StoryEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertStories(stories: List<StoryEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertStory(story: StoryEntity)
+
+  @Query("UPDATE stories SET isViewed = 1, viewsCount = viewsCount + 1 WHERE id = :storyId")
+  suspend fun markStoryViewed(storyId: String)
+
+  // Reels
+  @Query("SELECT * FROM reels")
+  fun getAllReels(): Flow<List<ReelEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertReels(reels: List<ReelEntity>)
+
+  @Update
+  suspend fun updateReel(reel: ReelEntity)
+
+  // Conversations & Messages
+  @Query("SELECT * FROM conversations ORDER BY lastMessageTimestamp DESC")
+  fun getAllConversations(): Flow<List<ConversationEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertConversations(conversations: List<ConversationEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertConversation(conversation: ConversationEntity)
+
+  @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY timestamp ASC")
+  fun getMessagesForConversation(conversationId: String): Flow<List<MessageEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertMessages(messages: List<MessageEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertMessage(message: MessageEntity)
+
+  @Query("DELETE FROM messages WHERE id = :messageId")
+  suspend fun deleteMessage(messageId: String)
+
+  // Notifications
+  @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
+  fun getAllNotifications(): Flow<List<NotificationEntity>>
+
+  @Query("SELECT * FROM notifications WHERE recipientId = :recipientId OR recipientId = 'user_me' ORDER BY timestamp DESC")
+  fun getNotificationsForRecipient(recipientId: String): Flow<List<NotificationEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertNotifications(notifications: List<NotificationEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertNotification(notification: NotificationEntity)
+
+  @Query("UPDATE notifications SET isRead = 1")
+  suspend fun markAllNotificationsAsRead()
+
+  @Query("UPDATE notifications SET isRead = 1 WHERE id = :id")
+  suspend fun markNotificationAsRead(id: String)
+
+  // Friend Requests
+  @Query("SELECT * FROM friend_requests ORDER BY createdAt DESC")
+  fun getAllFriendRequests(): Flow<List<FriendRequestEntity>>
+
+  @Query("SELECT * FROM friend_requests WHERE receiverId = :receiverId AND status = 'pending' ORDER BY createdAt DESC")
+  fun getIncomingFriendRequests(receiverId: String): Flow<List<FriendRequestEntity>>
+
+  @Query("SELECT * FROM friend_requests WHERE senderId = :senderId AND status = 'pending' ORDER BY createdAt DESC")
+  fun getSentFriendRequests(senderId: String): Flow<List<FriendRequestEntity>>
+
+  @Query("SELECT * FROM friend_requests WHERE id = :requestId LIMIT 1")
+  suspend fun getFriendRequestById(requestId: String): FriendRequestEntity?
+
+  @Query("SELECT * FROM friend_requests WHERE senderId = :senderId AND receiverId = :receiverId AND status = 'pending' LIMIT 1")
+  suspend fun getPendingRequest(senderId: String, receiverId: String): FriendRequestEntity?
+
+  @Query("SELECT * FROM friend_requests WHERE ((senderId = :userA AND receiverId = :userB) OR (senderId = :userB AND receiverId = :userA)) AND status = 'pending' LIMIT 1")
+  fun getPendingRequestBetween(userA: String, userB: String): Flow<FriendRequestEntity?>
+
+  @Query("SELECT * FROM friend_requests WHERE ((senderId = :userA AND receiverId = :userB) OR (senderId = :userB AND receiverId = :userA)) AND status = 'pending' LIMIT 1")
+  suspend fun getPendingRequestBetweenSync(userA: String, userB: String): FriendRequestEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertFriendRequests(requests: List<FriendRequestEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertFriendRequest(request: FriendRequestEntity)
+
+  @Update
+  suspend fun updateFriendRequest(request: FriendRequestEntity)
+
+  @Query("DELETE FROM friend_requests WHERE id = :requestId")
+  suspend fun deleteFriendRequest(requestId: String)
+
+  @Query("DELETE FROM friend_requests WHERE (senderId = :userA AND receiverId = :userB) OR (senderId = :userB AND receiverId = :userA)")
+  suspend fun deleteFriendRequestsBetween(userA: String, userB: String)
+
+  // Friendships
+  @Query("SELECT * FROM friends WHERE userId = :userId ORDER BY createdAt DESC")
+  fun getFriendshipsForUser(userId: String): Flow<List<FriendshipEntity>>
+
+  @Query("SELECT friendId FROM friends WHERE userId = :userId")
+  fun getFriendIdsForUser(userId: String): Flow<List<String>>
+
+  @Query("SELECT COUNT(*) > 0 FROM friends WHERE (userId = :userA AND friendId = :userB) OR (userId = :userB AND friendId = :userA)")
+  fun hasFriendshipFlow(userA: String, userB: String): Flow<Boolean>
+
+  @Query("SELECT COUNT(*) > 0 FROM friends WHERE (userId = :userA AND friendId = :userB) OR (userId = :userB AND friendId = :userA)")
+  suspend fun hasFriendship(userA: String, userB: String): Boolean
+
+  @Query("SELECT COUNT(*) FROM friends WHERE userId = :userId")
+  suspend fun getFriendsCount(userId: String): Int
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertFriendship(friendship: FriendshipEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertFriendships(friendships: List<FriendshipEntity>)
+
+  @Query("DELETE FROM friends WHERE (userId = :userA AND friendId = :userB) OR (userId = :userB AND friendId = :userA)")
+  suspend fun deleteFriendshipBetween(userA: String, userB: String)
+
+  // Follows
+  @Query("SELECT * FROM follows WHERE followerId = :followerId ORDER BY createdAt DESC")
+  fun getFollowsForUser(followerId: String): Flow<List<FollowEntity>>
+
+  @Query("SELECT COUNT(*) > 0 FROM follows WHERE followerId = :followerId AND followingId = :followingId")
+  fun isFollowingFlow(followerId: String, followingId: String): Flow<Boolean>
+
+  @Query("SELECT COUNT(*) > 0 FROM follows WHERE followerId = :followerId AND followingId = :followingId")
+  suspend fun isFollowing(followerId: String, followingId: String): Boolean
+
+  @Query("SELECT COUNT(*) FROM follows WHERE followingId = :userId")
+  suspend fun getFollowersCount(userId: String): Int
+
+  @Query("SELECT COUNT(*) FROM follows WHERE followerId = :userId")
+  suspend fun getFollowingCount(userId: String): Int
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertFollow(follow: FollowEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertFollows(follows: List<FollowEntity>)
+
+  @Query("DELETE FROM follows WHERE followerId = :followerId AND followingId = :followingId")
+  suspend fun deleteFollow(followerId: String, followingId: String)
+
+  // Pages
+  @Query("SELECT * FROM pages")
+  fun getAllPages(): Flow<List<PageEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPages(pages: List<PageEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPage(page: PageEntity)
+
+  @Update
+  suspend fun updatePage(page: PageEntity)
+
+  // Groups
+  @Query("SELECT * FROM groups")
+  fun getAllGroups(): Flow<List<GroupEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertGroups(groups: List<GroupEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertGroup(group: GroupEntity)
+
+  @Update
+  suspend fun updateGroup(group: GroupEntity)
+
+  // Reports
+  @Query("SELECT * FROM reports ORDER BY timestamp DESC")
+  fun getAllReports(): Flow<List<ReportEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertReports(reports: List<ReportEntity>)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertReport(report: ReportEntity)
+
+  @Query("UPDATE reports SET status = 'Resolved' WHERE id = :reportId")
+  suspend fun resolveReport(reportId: String)
+
+  @Query("DELETE FROM reports WHERE id = :reportId")
+  suspend fun deleteReport(reportId: String)
+}
