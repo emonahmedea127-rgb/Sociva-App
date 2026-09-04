@@ -444,6 +444,42 @@ object SeedData {
     )
   )
 
+  val postReactions = listOf(
+    // Post 1 (Sarah's post): Alex (user_me: LOVE), Marcus (LIKE), Maya (LOVE), David (WOW), Elena (LIKE)
+    PostReactionEntity(id = "pr_1_1", postId = "post_1", userId = "user_me", reactionType = "LOVE", createdAt = now - (1000 * 60 * 20)),
+    PostReactionEntity(id = "pr_1_2", postId = "post_1", userId = "user_marcus", reactionType = "LIKE", createdAt = now - (1000 * 60 * 18)),
+    PostReactionEntity(id = "pr_1_3", postId = "post_1", userId = "user_maya", reactionType = "LOVE", createdAt = now - (1000 * 60 * 15)),
+    PostReactionEntity(id = "pr_1_4", postId = "post_1", userId = "user_david", reactionType = "WOW", createdAt = now - (1000 * 60 * 12)),
+    PostReactionEntity(id = "pr_1_5", postId = "post_1", userId = "user_elena", reactionType = "LIKE", createdAt = now - (1000 * 60 * 10)),
+
+    // Post 2 (Alex's post): Alex (user_me: LIKE), Sarah (LOVE), Marcus (LIKE), Maya (HAHA), David (WOW), Elena (LIKE)
+    PostReactionEntity(id = "pr_2_1", postId = "post_2", userId = "user_me", reactionType = "LIKE", createdAt = now - (1000 * 60 * 85)),
+    PostReactionEntity(id = "pr_2_2", postId = "post_2", userId = "user_sarah", reactionType = "LOVE", createdAt = now - (1000 * 60 * 80)),
+    PostReactionEntity(id = "pr_2_3", postId = "post_2", userId = "user_marcus", reactionType = "LIKE", createdAt = now - (1000 * 60 * 70)),
+    PostReactionEntity(id = "pr_2_4", postId = "post_2", userId = "user_maya", reactionType = "HAHA", createdAt = now - (1000 * 60 * 65)),
+    PostReactionEntity(id = "pr_2_5", postId = "post_2", userId = "user_david", reactionType = "WOW", createdAt = now - (1000 * 60 * 50)),
+    PostReactionEntity(id = "pr_2_6", postId = "post_2", userId = "user_elena", reactionType = "LIKE", createdAt = now - (1000 * 60 * 40)),
+
+    // Post 3 (Marcus's post): Sarah (LOVE), Maya (WOW), Elena (LIKE), David (LIKE)
+    PostReactionEntity(id = "pr_3_1", postId = "post_3", userId = "user_sarah", reactionType = "LOVE", createdAt = now - (1000 * 60 * 160)),
+    PostReactionEntity(id = "pr_3_2", postId = "post_3", userId = "user_maya", reactionType = "WOW", createdAt = now - (1000 * 60 * 150)),
+    PostReactionEntity(id = "pr_3_3", postId = "post_3", userId = "user_elena", reactionType = "LIKE", createdAt = now - (1000 * 60 * 140)),
+    PostReactionEntity(id = "pr_3_4", postId = "post_3", userId = "user_david", reactionType = "LIKE", createdAt = now - (1000 * 60 * 130)),
+
+    // Post 4 (Maya's post): Alex (user_me: LIKE), Sarah (LOVE), Marcus (WOW), Elena (HAHA), David (LIKE)
+    PostReactionEntity(id = "pr_4_1", postId = "post_4", userId = "user_me", reactionType = "LIKE", createdAt = now - (1000 * 60 * 350)),
+    PostReactionEntity(id = "pr_4_2", postId = "post_4", userId = "user_sarah", reactionType = "LOVE", createdAt = now - (1000 * 60 * 340)),
+    PostReactionEntity(id = "pr_4_3", postId = "post_4", userId = "user_marcus", reactionType = "WOW", createdAt = now - (1000 * 60 * 330)),
+    PostReactionEntity(id = "pr_4_4", postId = "post_4", userId = "user_elena", reactionType = "HAHA", createdAt = now - (1000 * 60 * 310)),
+    PostReactionEntity(id = "pr_4_5", postId = "post_4", userId = "user_david", reactionType = "LIKE", createdAt = now - (1000 * 60 * 300)),
+
+    // Post 5 (David's post): Sarah (LIKE), Marcus (WOW), Maya (LOVE), Elena (LIKE)
+    PostReactionEntity(id = "pr_5_1", postId = "post_5", userId = "user_sarah", reactionType = "LIKE", createdAt = now - (1000 * 60 * 700)),
+    PostReactionEntity(id = "pr_5_2", postId = "post_5", userId = "user_marcus", reactionType = "WOW", createdAt = now - (1000 * 60 * 680)),
+    PostReactionEntity(id = "pr_5_3", postId = "post_5", userId = "user_maya", reactionType = "LOVE", createdAt = now - (1000 * 60 * 660)),
+    PostReactionEntity(id = "pr_5_4", postId = "post_5", userId = "user_elena", reactionType = "LIKE", createdAt = now - (1000 * 60 * 640))
+  )
+
   val stories = listOf(
     StoryEntity(
       id = "story_me",

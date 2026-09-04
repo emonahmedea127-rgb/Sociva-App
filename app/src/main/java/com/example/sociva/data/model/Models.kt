@@ -40,6 +40,20 @@ data class TaggedUser(
   val avatarUrl: String = ""
 )
 
+data class StructuredLocation(
+  val city: String = "",
+  val region: String = "",
+  val country: String = "",
+  val countryCode: String = "",
+  val latitude: Double = 0.0,
+  val longitude: Double = 0.0
+) {
+  fun format(): String {
+    val parts = listOf(city, region, country).filter { it.isNotBlank() }.distinct()
+    return parts.joinToString(", ")
+  }
+}
+
 data class RelationshipItem(
   val id: String,
   val requesterId: String,
@@ -91,6 +105,15 @@ data class User(
   val hometown: String = "",
   val currentCity: String = "",
   val country: String = "",
+  val currentRegion: String = "",
+  val currentCountryCode: String = "",
+  val currentLatitude: Double? = null,
+  val currentLongitude: Double? = null,
+  val hometownRegion: String = "",
+  val hometownCountryCode: String = "",
+  val hometownLatitude: Double? = null,
+  val hometownLongitude: Double? = null,
+  val countryCode: String = "",
   // Work Information
   val workplace: String = "",
   val workPosition: String = "",
@@ -108,7 +131,7 @@ data class User(
   val email: String = "",
   val phone: String = "",
   // Relationship Status & Partner
-  val relationshipStatus: String = "Single",
+  val relationshipStatus: String = "",
   val relationshipPartnerId: String? = null,
   val relationshipPartnerName: String? = null,
   val customRelationshipText: String? = null,
@@ -139,7 +162,9 @@ data class Post(
   val sharesCount: Int = 0,
   val myReaction: ReactionType? = null,
   val isSaved: Boolean = false,
-  val taggedUsers: List<TaggedUser> = emptyList()
+  val taggedUsers: List<TaggedUser> = emptyList(),
+  val topReactionEmojis: List<String> = emptyList(),
+  val reactionTypeCounts: Map<ReactionType, Int> = emptyMap()
 )
 
 data class Comment(
@@ -168,6 +193,33 @@ data class CommentReaction(
   val userId: String,
   val reactionType: ReactionType,
   val createdAt: Long
+)
+
+data class PostReaction(
+  val id: String,
+  val postId: String,
+  val userId: String,
+  val reactionType: ReactionType,
+  val createdAt: Long
+)
+
+enum class ReactionRelationshipStatus {
+  YOU,
+  FRIEND,
+  REQUEST_SENT,
+  REQUEST_RECEIVED,
+  FOLLOWING,
+  CAN_ADD_FRIEND
+}
+
+data class PostReactionUser(
+  val reactionId: String,
+  val postId: String,
+  val user: User,
+  val reactionType: ReactionType,
+  val createdAt: Long,
+  val relationshipStatus: ReactionRelationshipStatus,
+  val incomingRequestId: String? = null
 )
 
 data class Story(
@@ -328,4 +380,11 @@ data class UserSettings(
   val audienceDefault: String = "Public",
   val twoFactorEnabled: Boolean = false,
   val dataSaverEnabled: Boolean = false
+)
+
+data class RelationshipContext(
+  val friendIds: Set<String>,
+  val sentReqTargetIds: Set<String>,
+  val incomingReqMap: Map<String, com.example.sociva.data.local.FriendRequestEntity>,
+  val followingIds: Set<String>
 )

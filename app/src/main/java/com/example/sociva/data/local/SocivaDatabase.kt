@@ -9,6 +9,7 @@ import androidx.room.RoomDatabase
   entities = [
     UserEntity::class,
     PostEntity::class,
+    PostReactionEntity::class,
     CommentEntity::class,
     CommentReactionEntity::class,
     StoryEntity::class,
@@ -27,7 +28,7 @@ import androidx.room.RoomDatabase
     PostTagEntity::class,
     CommentMentionEntity::class
   ],
-  version = 6,
+  version = 8,
   exportSchema = false
 )
 abstract class SocivaDatabase : RoomDatabase() {

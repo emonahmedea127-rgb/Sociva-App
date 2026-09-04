@@ -245,7 +245,8 @@ fun SearchScreen(
                 onSaveClick = { viewModel.toggleSavePost(post.id) },
                 onAuthorClick = { viewModel.navigateToProfile(post.authorId) },
                 onDeleteClick = {},
-                onReportClick = {}
+                onReportClick = {},
+                onReactionsClick = { viewModel.openReactionsModal(post.id) }
               )
             }
           }

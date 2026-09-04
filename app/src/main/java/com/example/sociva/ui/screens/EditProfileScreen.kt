@@ -40,9 +40,9 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.sociva.data.model.User
+import com.example.sociva.data.model.StructuredLocation
 import com.example.sociva.ui.SocivaViewModel
-import com.example.sociva.ui.components.ImageCropperModal
-import com.example.sociva.ui.components.CropType
+import com.example.sociva.ui.components.*
 import com.example.ui.theme.SocivaBlue
 import com.example.ui.theme.SocivaIndigo
 import com.example.ui.theme.SocivaPurple
@@ -82,8 +82,26 @@ fun EditProfileScreen(
   var gender by remember { mutableStateOf(user.gender) }
   var interestedIn by remember { mutableStateOf(user.interestedIn) }
   var hometown by remember { mutableStateOf(user.hometown) }
+  var hometownRegion by remember { mutableStateOf(user.hometownRegion) }
+  var hometownCountryCode by remember { mutableStateOf(user.hometownCountryCode) }
+  var hometownLatitude by remember { mutableStateOf(user.hometownLatitude) }
+  var hometownLongitude by remember { mutableStateOf(user.hometownLongitude) }
+
   var currentCity by remember { mutableStateOf(user.currentCity) }
+  var currentRegion by remember { mutableStateOf(user.currentRegion) }
+  var currentCountryCode by remember { mutableStateOf(user.currentCountryCode) }
+  var currentLatitude by remember { mutableStateOf(user.currentLatitude) }
+  var currentLongitude by remember { mutableStateOf(user.currentLongitude) }
+
   var country by remember { mutableStateOf(user.country) }
+  var countryCode by remember { mutableStateOf(user.countryCode) }
+
+  // Modal Visibility
+  var showCurrentCityPicker by remember { mutableStateOf(false) }
+  var showHometownPicker by remember { mutableStateOf(false) }
+  var showCountryPicker by remember { mutableStateOf(false) }
+  var showDobPicker by remember { mutableStateOf(false) }
+  var isSaving by remember { mutableStateOf(false) }
 
   // Privacy Settings
   var birthdayPrivacy by remember { mutableStateOf(user.birthdayPrivacy) }
@@ -171,72 +189,82 @@ fun EditProfileScreen(
       return
     }
 
-    val updatedUser = user.copy(
-      firstName = firstName.trim(),
-      lastName = lastName.trim(),
-      fullName = "${firstName.trim()} ${lastName.trim()}".trim().ifBlank { user.fullName },
-      username = username.trim().ifBlank { user.username },
-      bio = bio.trim(),
-      pronouns = pronouns.trim(),
-      nickname = nickname.trim(),
-      otherNames = otherNames.trim(),
-      dateOfBirth = dateOfBirth.trim(),
-      gender = gender,
-      interestedIn = interestedIn,
-      hometown = hometown.trim(),
-      currentCity = currentCity.trim(),
-      country = country.trim(),
-      birthdayPrivacy = birthdayPrivacy,
-      hometownPrivacy = hometownPrivacy,
-      currentCityPrivacy = currentCityPrivacy,
-      relationshipPrivacy = relationshipPrivacy,
-      emailPrivacy = emailPrivacy,
-      workplace = workplace.trim(),
-      workPosition = workPosition.trim(),
-      workStartDate = workStartDate.trim(),
-      workEndDate = workEndDate.trim(),
-      school = school.trim(),
-      college = college.trim(),
-      university = university.trim(),
-      degree = degree.trim(),
-      fieldOfStudy = fieldOfStudy.trim(),
-      graduationYear = graduationYear.trim(),
-      website = website.trim(),
-      email = email.trim(),
-      phone = phone.trim(),
-      taggingPermission = taggingPermission,
-      reviewTagsBeforeAppearing = reviewTagsBeforeAppearing
-    )
+    if (isSaving) return
+    isSaving = true
 
-    viewModel.updateFullUserProfile(updatedUser)
+    coroutineScope.launch {
+      val resolvedRelationshipStatus = if (relationshipStatus == "Not specified") "" else relationshipStatus
+      val updatedUser = user.copy(
+        firstName = firstName.trim(),
+        lastName = lastName.trim(),
+        fullName = "${firstName.trim()} ${lastName.trim()}".trim().ifBlank { user.fullName },
+        username = username.trim().ifBlank { user.username },
+        bio = bio.trim(),
+        pronouns = pronouns.trim(),
+        nickname = nickname.trim(),
+        otherNames = otherNames.trim(),
+        dateOfBirth = dateOfBirth.trim(),
+        gender = gender,
+        interestedIn = interestedIn,
+        hometown = hometown.trim(),
+        hometownRegion = hometownRegion.trim(),
+        hometownCountryCode = hometownCountryCode.trim(),
+        hometownLatitude = hometownLatitude,
+        hometownLongitude = hometownLongitude,
+        currentCity = currentCity.trim(),
+        currentRegion = currentRegion.trim(),
+        currentCountryCode = currentCountryCode.trim(),
+        currentLatitude = currentLatitude,
+        currentLongitude = currentLongitude,
+        country = country.trim(),
+        countryCode = countryCode.trim(),
+        birthdayPrivacy = birthdayPrivacy,
+        hometownPrivacy = hometownPrivacy,
+        currentCityPrivacy = currentCityPrivacy,
+        relationshipPrivacy = relationshipPrivacy,
+        emailPrivacy = emailPrivacy,
+        relationshipStatus = resolvedRelationshipStatus,
+        relationshipPartnerId = selectedPartnerId,
+        relationshipPartnerName = selectedPartnerName,
+        customRelationshipText = customRelationshipText.trim().ifBlank { null },
+        workplace = workplace.trim(),
+        workPosition = workPosition.trim(),
+        workStartDate = workStartDate.trim(),
+        workEndDate = workEndDate.trim(),
+        school = school.trim(),
+        college = college.trim(),
+        university = university.trim(),
+        degree = degree.trim(),
+        fieldOfStudy = fieldOfStudy.trim(),
+        graduationYear = graduationYear.trim(),
+        website = website.trim(),
+        email = email.trim(),
+        phone = phone.trim(),
+        taggingPermission = taggingPermission,
+        reviewTagsBeforeAppearing = reviewTagsBeforeAppearing
+      )
 
-    // Handle relationship status changes
-    if (relationshipStatus == "Single") {
-      if (user.relationshipStatus != "Single" || user.relationshipPartnerId != null) {
-        viewModel.removeRelationship("Single")
-      }
-    } else {
-      // If a partner was selected and it's a new partner request
-      if (selectedPartnerId != null && selectedPartnerId != user.relationshipPartnerId) {
-        viewModel.sendRelationshipRequest(
-          targetUserId = selectedPartnerId!!,
-          relationshipType = relationshipStatus,
-          customText = customRelationshipText.ifBlank { null },
-          privacy = relationshipPrivacy
-        )
-      } else if (customRelationshipText.isNotBlank() && customRelationshipText != user.customRelationshipText) {
-        // Just updated custom text
-        viewModel.updateFullUserProfile(
-          updatedUser.copy(
-            relationshipStatus = relationshipStatus,
-            customRelationshipText = customRelationshipText,
-            relationshipPrivacy = relationshipPrivacy
+      viewModel.saveUserProfile(updatedUser)
+
+      // Handle relationship status changes
+      if (resolvedRelationshipStatus == "Single" || resolvedRelationshipStatus.isBlank()) {
+        if (user.relationshipStatus.isNotBlank() && user.relationshipStatus != "Single") {
+          viewModel.removeRelationship(resolvedRelationshipStatus.ifBlank { "Single" })
+        }
+      } else {
+        if (selectedPartnerId != null && selectedPartnerId != user.relationshipPartnerId) {
+          viewModel.sendRelationshipRequest(
+            targetUserId = selectedPartnerId!!,
+            relationshipType = resolvedRelationshipStatus,
+            customText = customRelationshipText.ifBlank { null },
+            privacy = relationshipPrivacy
           )
-        )
+        }
       }
-    }
 
-    onBack()
+      isSaving = false
+      onBack()
+    }
   }
 
   Scaffold(
@@ -257,14 +285,19 @@ fun EditProfileScreen(
         actions = {
           TextButton(
             onClick = { saveProfile() },
+            enabled = !isSaving,
             modifier = Modifier.testTag("save_profile_top_btn")
           ) {
-            Text(
-              text = "Save",
-              color = SocivaBlue,
-              fontWeight = FontWeight.Bold,
-              fontSize = 16.sp
-            )
+            if (isSaving) {
+              CircularProgressIndicator(modifier = Modifier.size(18.dp), color = SocivaBlue, strokeWidth = 2.dp)
+            } else {
+              Text(
+                text = "Save",
+                color = SocivaBlue,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+              )
+            }
           }
         }
       )
@@ -283,6 +316,7 @@ fun EditProfileScreen(
         ) {
           Button(
             onClick = { saveProfile() },
+            enabled = !isSaving,
             modifier = Modifier
               .fillMaxWidth()
               .height(50.dp)
@@ -290,9 +324,15 @@ fun EditProfileScreen(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = SocivaBlue)
           ) {
-            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Save Changes", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            if (isSaving) {
+              CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+              Spacer(modifier = Modifier.width(8.dp))
+              Text("Saving...", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            } else {
+              Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(20.dp))
+              Spacer(modifier = Modifier.width(8.dp))
+              Text("Save Changes", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
           }
         }
       }
@@ -516,15 +556,57 @@ fun EditProfileScreen(
             onPrivacySelected = { birthdayPrivacy = it }
           )
         }
-        OutlinedTextField(
-          value = dateOfBirth,
-          onValueChange = { dateOfBirth = it },
-          placeholder = { Text("e.g. May 18, 1996") },
-          leadingIcon = { Icon(Icons.Outlined.Cake, contentDescription = null, tint = SocivaBlue) },
-          modifier = Modifier.fillMaxWidth().testTag("input_dob"),
+
+        Surface(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { showDobPicker = true }
+            .testTag("input_dob"),
           shape = RoundedCornerShape(12.dp),
-          singleLine = true
-        )
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+              modifier = Modifier.weight(1f)
+            ) {
+              Icon(Icons.Outlined.Cake, contentDescription = null, tint = SocivaBlue)
+              if (dateOfBirth.isNotBlank()) {
+                Text(
+                  text = dateOfBirth,
+                  style = MaterialTheme.typography.bodyLarge,
+                  fontWeight = FontWeight.SemiBold,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+              } else {
+                Text(
+                  text = "Select Date of Birth",
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+            if (dateOfBirth.isNotBlank()) {
+              IconButton(
+                onClick = { dateOfBirth = "" },
+                modifier = Modifier.size(28.dp)
+              ) {
+                Icon(Icons.Default.Close, contentDescription = "Clear Birthday", modifier = Modifier.size(16.dp))
+              }
+            } else {
+              Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = SocivaBlue, modifier = Modifier.size(20.dp))
+            }
+          }
+        }
       }
 
       // Gender Selector
@@ -558,6 +640,7 @@ fun EditProfileScreen(
         }
 
         val relationshipOptions = listOf(
+          "Not specified",
           "Single",
           "In a relationship",
           "Engaged",
@@ -573,20 +656,22 @@ fun EditProfileScreen(
 
         DropdownField(
           label = "Status",
-          selectedValue = relationshipStatus,
+          selectedValue = if (relationshipStatus.isBlank()) "Not specified" else relationshipStatus,
           options = relationshipOptions,
           onSelect = { status ->
-            relationshipStatus = status
-            if (status == "Single") {
+            if (status == "Not specified" || status == "Single") {
+              relationshipStatus = if (status == "Single") "Single" else ""
               selectedPartnerId = null
               selectedPartnerName = null
               customRelationshipText = ""
+            } else {
+              relationshipStatus = status
             }
           }
         )
 
-        // If not Single: Partner Picker or Custom Partner
-        AnimatedVisibility(visible = relationshipStatus != "Single") {
+        // If in a non-single relationship: Partner Picker or Custom Partner
+        AnimatedVisibility(visible = relationshipStatus.isNotBlank() && relationshipStatus != "Single" && relationshipStatus != "Not specified") {
           Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -661,8 +746,9 @@ fun EditProfileScreen(
         }
       }
 
-      // Hometown & Current City
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      // Location Section: Current City, Hometown & Country
+      Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Current City
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
           Row(
             modifier = Modifier.fillMaxWidth(),
@@ -675,17 +761,76 @@ fun EditProfileScreen(
               onPrivacySelected = { currentCityPrivacy = it }
             )
           }
-          OutlinedTextField(
-            value = currentCity,
-            onValueChange = { currentCity = it },
-            placeholder = { Text("e.g. San Francisco, California") },
-            leadingIcon = { Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = SocivaBlue) },
-            modifier = Modifier.fillMaxWidth().testTag("input_current_city"),
+
+          Surface(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(12.dp))
+              .clickable { showCurrentCityPicker = true }
+              .testTag("input_current_city"),
             shape = RoundedCornerShape(12.dp),
-            singleLine = true
-          )
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+              ) {
+                Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = SocivaBlue)
+                if (currentCity.isNotBlank()) {
+                  Column {
+                    Text(
+                      text = currentCity,
+                      style = MaterialTheme.typography.bodyLarge,
+                      fontWeight = FontWeight.SemiBold,
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (currentRegion.isNotBlank() || currentCountryCode.isNotBlank()) {
+                      Text(
+                        text = listOf(currentRegion, currentCountryCode).filter { it.isNotBlank() }.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+                } else {
+                  Text(
+                    text = "Pick current city on map / search",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                if (currentCity.isNotBlank()) {
+                  IconButton(
+                    onClick = {
+                      currentCity = ""
+                      currentRegion = ""
+                      currentCountryCode = ""
+                      currentLatitude = null
+                      currentLongitude = null
+                    },
+                    modifier = Modifier.size(28.dp)
+                  ) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear City", modifier = Modifier.size(16.dp))
+                  }
+                }
+                Icon(Icons.Outlined.Map, contentDescription = "Open Map", tint = SocivaBlue, modifier = Modifier.size(20.dp))
+              }
+            }
+          }
         }
 
+        // Hometown
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
           Row(
             modifier = Modifier.fillMaxWidth(),
@@ -698,27 +843,146 @@ fun EditProfileScreen(
               onPrivacySelected = { hometownPrivacy = it }
             )
           }
-          OutlinedTextField(
-            value = hometown,
-            onValueChange = { hometown = it },
-            placeholder = { Text("e.g. Los Angeles, California") },
-            leadingIcon = { Icon(Icons.Outlined.Home, contentDescription = null, tint = SocivaIndigo) },
-            modifier = Modifier.fillMaxWidth().testTag("input_hometown"),
+
+          Surface(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(12.dp))
+              .clickable { showHometownPicker = true }
+              .testTag("input_hometown"),
             shape = RoundedCornerShape(12.dp),
-            singleLine = true
-          )
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+              ) {
+                Icon(Icons.Outlined.Home, contentDescription = null, tint = SocivaIndigo)
+                if (hometown.isNotBlank()) {
+                  Column {
+                    Text(
+                      text = hometown,
+                      style = MaterialTheme.typography.bodyLarge,
+                      fontWeight = FontWeight.SemiBold,
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (hometownRegion.isNotBlank() || hometownCountryCode.isNotBlank()) {
+                      Text(
+                        text = listOf(hometownRegion, hometownCountryCode).filter { it.isNotBlank() }.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+                } else {
+                  Text(
+                    text = "Pick hometown on map / search",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                if (hometown.isNotBlank()) {
+                  IconButton(
+                    onClick = {
+                      hometown = ""
+                      hometownRegion = ""
+                      hometownCountryCode = ""
+                      hometownLatitude = null
+                      hometownLongitude = null
+                    },
+                    modifier = Modifier.size(28.dp)
+                  ) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear Hometown", modifier = Modifier.size(16.dp))
+                  }
+                }
+                Icon(Icons.Outlined.Map, contentDescription = "Open Map", tint = SocivaIndigo, modifier = Modifier.size(20.dp))
+              }
+            }
+          }
         }
 
-        OutlinedTextField(
-          value = country,
-          onValueChange = { country = it },
-          label = { Text("Country") },
-          placeholder = { Text("e.g. United States") },
-          leadingIcon = { Icon(Icons.Outlined.Public, contentDescription = null) },
-          modifier = Modifier.fillMaxWidth().testTag("input_country"),
-          shape = RoundedCornerShape(12.dp),
-          singleLine = true
-        )
+        // Country
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text("Country", fontWeight = FontWeight.Medium)
+          Surface(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(12.dp))
+              .clickable { showCountryPicker = true }
+              .testTag("input_country"),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+              ) {
+                val flag = remember(country, countryCode) {
+                  CountryHelper.getFlagForCountry(country)
+                }
+                if (country.isNotBlank()) {
+                  Text(flag, fontSize = 22.sp)
+                  Column {
+                    Text(
+                      text = country,
+                      style = MaterialTheme.typography.bodyLarge,
+                      fontWeight = FontWeight.SemiBold,
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (countryCode.isNotBlank()) {
+                      Text(
+                        text = "Code: $countryCode",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+                } else {
+                  Icon(Icons.Outlined.Public, contentDescription = null, tint = SocivaBlue)
+                  Text(
+                    text = "Select Country",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                if (country.isNotBlank()) {
+                  IconButton(
+                    onClick = {
+                      country = ""
+                      countryCode = ""
+                    },
+                    modifier = Modifier.size(28.dp)
+                  ) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear Country", modifier = Modifier.size(16.dp))
+                  }
+                }
+                Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Country")
+              }
+            }
+          }
+        }
       }
 
       // ==========================================
@@ -1055,6 +1319,96 @@ fun EditProfileScreen(
         }
       },
       onDismiss = { croppingBitmap = null }
+    )
+  }
+
+  // Date of Birth Picker Modal
+  if (showDobPicker) {
+    DateOfBirthPickerModal(
+      initialDate = dateOfBirth,
+      onDateSelected = { dateOfBirth = it },
+      onClearDate = { dateOfBirth = "" },
+      onDismiss = { showDobPicker = false }
+    )
+  }
+
+  // Current City Location Picker Modal
+  if (showCurrentCityPicker) {
+    LocationPickerModal(
+      title = "Current City",
+      initialLocation = com.example.sociva.data.model.StructuredLocation(
+        city = currentCity,
+        region = currentRegion,
+        country = country,
+        countryCode = currentCountryCode,
+        latitude = currentLatitude ?: 0.0,
+        longitude = currentLongitude ?: 0.0
+      ),
+      onLocationConfirmed = { loc ->
+        currentCity = loc.city
+        currentRegion = loc.region
+        currentCountryCode = loc.countryCode
+        currentLatitude = loc.latitude
+        currentLongitude = loc.longitude
+        if (country.isBlank() && loc.country.isNotBlank()) {
+          country = loc.country
+          countryCode = loc.countryCode
+        }
+      },
+      onClearLocation = {
+        currentCity = ""
+        currentRegion = ""
+        currentCountryCode = ""
+        currentLatitude = 0.0
+        currentLongitude = 0.0
+      },
+      onDismiss = { showCurrentCityPicker = false }
+    )
+  }
+
+  // Hometown Location Picker Modal
+  if (showHometownPicker) {
+    LocationPickerModal(
+      title = "Hometown",
+      initialLocation = com.example.sociva.data.model.StructuredLocation(
+        city = hometown,
+        region = hometownRegion,
+        countryCode = hometownCountryCode,
+        latitude = hometownLatitude ?: 0.0,
+        longitude = hometownLongitude ?: 0.0
+      ),
+      onLocationConfirmed = { loc ->
+        hometown = loc.city
+        hometownRegion = loc.region
+        hometownCountryCode = loc.countryCode
+        hometownLatitude = loc.latitude
+        hometownLongitude = loc.longitude
+      },
+      onClearLocation = {
+        hometown = ""
+        hometownRegion = ""
+        hometownCountryCode = ""
+        hometownLatitude = 0.0
+        hometownLongitude = 0.0
+      },
+      onDismiss = { showHometownPicker = false }
+    )
+  }
+
+  // Country Picker Modal
+  if (showCountryPicker) {
+    CountryPickerModal(
+      selectedCountryName = country,
+      selectedCountryCode = countryCode,
+      onSelectCountry = { cName, cCode ->
+        country = cName
+        countryCode = cCode
+      },
+      onClearCountry = {
+        country = ""
+        countryCode = ""
+      },
+      onDismiss = { showCountryPicker = false }
     )
   }
 }

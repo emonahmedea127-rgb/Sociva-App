@@ -30,6 +30,10 @@ class SocivaRepository(
         if (existingMembers.isEmpty()) {
           dao.insertConversationMembers(SeedData.conversationMembers)
         }
+        val existingPostReactions = dao.countReactionsForPost("post_1")
+        if (existingPostReactions == 0) {
+          dao.insertPostReactions(SeedData.postReactions)
+        }
       }
     }
   }
@@ -37,6 +41,7 @@ class SocivaRepository(
   private suspend fun seedDatabase() {
     dao.insertUsers(SeedData.users)
     dao.insertPosts(SeedData.posts)
+    dao.insertPostReactions(SeedData.postReactions)
     dao.insertComments(SeedData.comments)
     dao.insertCommentReactions(SeedData.commentReactions)
     dao.insertStories(SeedData.stories)
@@ -68,6 +73,8 @@ class SocivaRepository(
 
   fun getUser(id: String): Flow<User?> = dao.getUserById(id).map { it?.toDomain() }
 
+  suspend fun insertUser(user: UserEntity) = dao.insertUser(user)
+
   suspend fun updateFullUserProfile(updated: User) {
     val existing = dao.getUserById(updated.id).first() ?: return
     val fullName = if (updated.firstName.isNotBlank() || updated.lastName.isNotBlank()) {
@@ -82,7 +89,7 @@ class SocivaRepository(
     } else if (updated.workplace.isNotBlank()) {
       updated.workplace
     } else {
-      updated.work
+      updated.work.trim()
     }
     val education = if (updated.degree.isNotBlank() && updated.university.isNotBlank()) {
       "${updated.degree} - ${updated.university}"
@@ -91,57 +98,80 @@ class SocivaRepository(
     } else if (updated.school.isNotBlank()) {
       updated.school
     } else {
-      updated.education
+      updated.education.trim()
     }
-    val location = if (updated.currentCity.isNotBlank()) {
+    val location = if (updated.currentCity.isNotBlank() && updated.country.isNotBlank()) {
+      "${updated.currentCity}, ${updated.country}"
+    } else if (updated.currentCity.isNotBlank()) {
       updated.currentCity
     } else if (updated.hometown.isNotBlank()) {
       updated.hometown
     } else {
-      updated.location
+      updated.location.trim()
     }
 
-    dao.updateUser(
-      existing.copy(
-        fullName = fullName,
-        firstName = updated.firstName,
-        lastName = updated.lastName,
-        username = updated.username.ifBlank { existing.username },
-        bio = updated.bio,
-        pronouns = updated.pronouns,
-        nickname = updated.nickname,
-        otherNames = updated.otherNames,
-        dateOfBirth = updated.dateOfBirth,
-        gender = updated.gender,
-        interestedIn = updated.interestedIn,
-        hometown = updated.hometown,
-        currentCity = updated.currentCity,
-        country = updated.country,
-        work = work,
-        workplace = updated.workplace,
-        workPosition = updated.workPosition,
-        workStartDate = updated.workStartDate,
-        workEndDate = updated.workEndDate,
-        education = education,
-        school = updated.school,
-        college = updated.college,
-        university = updated.university,
-        degree = updated.degree,
-        fieldOfStudy = updated.fieldOfStudy,
-        graduationYear = updated.graduationYear,
-        website = updated.website,
-        email = updated.email,
-        phone = updated.phone,
-        location = location,
-        birthdayPrivacy = updated.birthdayPrivacy,
-        currentCityPrivacy = updated.currentCityPrivacy,
-        hometownPrivacy = updated.hometownPrivacy,
-        relationshipPrivacy = updated.relationshipPrivacy,
-        emailPrivacy = updated.emailPrivacy,
-        taggingPermission = updated.taggingPermission,
-        reviewTagsBeforeAppearing = updated.reviewTagsBeforeAppearing
-      )
+    val updatedEntity = existing.copy(
+      fullName = fullName,
+      firstName = updated.firstName,
+      lastName = updated.lastName,
+      username = updated.username.ifBlank { existing.username },
+      bio = updated.bio,
+      pronouns = updated.pronouns,
+      nickname = updated.nickname,
+      otherNames = updated.otherNames,
+      dateOfBirth = updated.dateOfBirth,
+      gender = updated.gender,
+      interestedIn = updated.interestedIn,
+      hometown = updated.hometown,
+      currentCity = updated.currentCity,
+      country = updated.country,
+      currentRegion = updated.currentRegion,
+      currentCountryCode = updated.currentCountryCode,
+      currentLatitude = updated.currentLatitude,
+      currentLongitude = updated.currentLongitude,
+      hometownRegion = updated.hometownRegion,
+      hometownCountryCode = updated.hometownCountryCode,
+      hometownLatitude = updated.hometownLatitude,
+      hometownLongitude = updated.hometownLongitude,
+      countryCode = updated.countryCode,
+      work = work,
+      workplace = updated.workplace,
+      workPosition = updated.workPosition,
+      workStartDate = updated.workStartDate,
+      workEndDate = updated.workEndDate,
+      education = education,
+      school = updated.school,
+      college = updated.college,
+      university = updated.university,
+      degree = updated.degree,
+      fieldOfStudy = updated.fieldOfStudy,
+      graduationYear = updated.graduationYear,
+      website = updated.website,
+      email = updated.email,
+      phone = updated.phone,
+      location = location,
+      relationshipStatus = updated.relationshipStatus,
+      relationshipPartnerId = updated.relationshipPartnerId,
+      relationshipPartnerName = updated.relationshipPartnerName,
+      customRelationshipText = updated.customRelationshipText,
+      birthdayPrivacy = updated.birthdayPrivacy,
+      currentCityPrivacy = updated.currentCityPrivacy,
+      hometownPrivacy = updated.hometownPrivacy,
+      relationshipPrivacy = updated.relationshipPrivacy,
+      emailPrivacy = updated.emailPrivacy,
+      taggingPermission = updated.taggingPermission,
+      reviewTagsBeforeAppearing = updated.reviewTagsBeforeAppearing
     )
+    dao.updateUser(updatedEntity)
+
+    // Propagate updated name and username anywhere displayed
+    val newUsername = updated.username.ifBlank { existing.username }
+    dao.updateAuthorInfoInPosts(updated.id, fullName, newUsername)
+    dao.updateAuthorNameInComments(updated.id, fullName)
+    dao.updateUserNameInStories(updated.id, fullName)
+    dao.updateCreatorInReels(updated.id, fullName, newUsername)
+    dao.updateParticipantInConversations(updated.id, fullName)
+    dao.updatePartnerNameInUsers(updated.id, fullName)
   }
 
   suspend fun updateUserProfile(
@@ -530,6 +560,9 @@ class SocivaRepository(
   // --- Posts ---
   private suspend fun mapPostEntitiesToDomain(entities: List<PostEntity>): List<Post> {
     val allUsersMap = dao.getAllUsers().first().associateBy { it.id }
+    val allPostReactions = dao.getAllPostReactions().first()
+    val reactionsByPost = allPostReactions.groupBy { it.postId }
+
     return entities.map { postEntity ->
       val tags = dao.getPostTags(postEntity.id)
       val taggedUsers = tags.mapNotNull { tag ->
@@ -537,24 +570,54 @@ class SocivaRepository(
           TaggedUser(id = u.id, fullName = u.fullName, username = u.username, avatarUrl = u.avatarUrl)
         }
       }
-      postEntity.toDomain(taggedUsers = taggedUsers)
+
+      val postReactions = reactionsByPost[postEntity.id].orEmpty()
+      val reactionTypeCounts = postReactions.mapNotNull { r ->
+        try { ReactionType.valueOf(r.reactionType) } catch (e: Exception) { null }
+      }.groupingBy { it }.eachCount()
+
+      // Sort reaction types by frequency descending to get top emojis
+      val topReactionEmojis = reactionTypeCounts.entries
+        .sortedByDescending { it.value }
+        .map { it.key.emoji }
+
+      // Check user_me reaction from post_reactions if present
+      val myPostReaction = postReactions.find { it.userId == "user_me" }?.let { r ->
+        try { ReactionType.valueOf(r.reactionType) } catch (e: Exception) { null }
+      } ?: postEntity.myReaction?.let {
+        try { ReactionType.valueOf(it) } catch (e: Exception) { null }
+      }
+
+      val effectiveLikesCount = if (postReactions.isNotEmpty()) {
+        maxOf(postEntity.likesCount, postReactions.size)
+      } else {
+        postEntity.likesCount
+      }
+
+      postEntity.toDomain(
+        taggedUsers = taggedUsers,
+        topReactionEmojis = topReactionEmojis,
+        reactionTypeCounts = reactionTypeCounts,
+        computedLikesCount = effectiveLikesCount,
+        currentMyReaction = myPostReaction
+      )
     }
   }
 
-  val allPosts: Flow<List<Post>> = dao.getAllPosts().map { list ->
-    mapPostEntitiesToDomain(list)
+  val allPosts: Flow<List<Post>> = combine(dao.getAllPosts(), dao.getAllPostReactions()) { posts, _ ->
+    mapPostEntitiesToDomain(posts)
   }
 
-  val savedPosts: Flow<List<Post>> = dao.getSavedPosts().map { list ->
-    mapPostEntitiesToDomain(list)
+  val savedPosts: Flow<List<Post>> = combine(dao.getSavedPosts(), dao.getAllPostReactions()) { posts, _ ->
+    mapPostEntitiesToDomain(posts)
   }
 
-  fun getPostsByUser(userId: String): Flow<List<Post>> = dao.getPostsByAuthor(userId).map { list ->
-    mapPostEntitiesToDomain(list)
+  fun getPostsByUser(userId: String): Flow<List<Post>> = combine(dao.getPostsByAuthor(userId), dao.getAllPostReactions()) { posts, _ ->
+    mapPostEntitiesToDomain(posts)
   }
 
-  fun getTaggedPostsByUser(userId: String): Flow<List<Post>> = dao.getTaggedPostsForUser(userId).map { list ->
-    mapPostEntitiesToDomain(list)
+  fun getTaggedPostsByUser(userId: String): Flow<List<Post>> = combine(dao.getTaggedPostsForUser(userId), dao.getAllPostReactions()) { posts, _ ->
+    mapPostEntitiesToDomain(posts)
   }
 
   suspend fun createPost(
@@ -627,27 +690,65 @@ class SocivaRepository(
 
   suspend fun deletePost(postId: String) {
     dao.deletePostById(postId)
+    dao.deleteReactionsForPost(postId)
   }
 
-  suspend fun setReaction(postId: String, reaction: ReactionType?) {
+  suspend fun setReaction(postId: String, reaction: ReactionType?, userId: String = "user_me") {
     val post = dao.getPostById(postId).first() ?: return
-    val hadPreviousReaction = post.myReaction != null
-    val isSameReaction = post.myReaction == reaction?.name
+    val existingReactionEntity = dao.findPostReaction(postId, userId)
+    val hadPreviousReaction = existingReactionEntity != null || post.myReaction != null
+    val isSameReaction = (existingReactionEntity?.reactionType ?: post.myReaction) == reaction?.name
 
-    val newReaction = if (isSameReaction) null else reaction?.name
-    val likeDelta = when {
-      isSameReaction -> -1 // removed
-      hadPreviousReaction -> 0 // changed reaction
-      reaction != null -> 1 // new reaction
-      else -> 0
-    }
-
-    dao.updatePost(
-      post.copy(
-        myReaction = newReaction,
-        likesCount = (post.likesCount + likeDelta).coerceAtLeast(0)
+    val now = System.currentTimeMillis()
+    if (isSameReaction) {
+      // Remove reaction
+      dao.deletePostReaction(postId, userId)
+      val newCount = (post.likesCount - 1).coerceAtLeast(0)
+      dao.updatePost(
+        post.copy(
+          myReaction = null,
+          likesCount = newCount
+        )
       )
-    )
+    } else if (reaction != null) {
+      // Add or update reaction
+      val reactionEntity = PostReactionEntity(
+        id = existingReactionEntity?.id ?: ("pr_" + UUID.randomUUID().toString().take(8)),
+        postId = postId,
+        userId = userId,
+        reactionType = reaction.name,
+        createdAt = now
+      )
+      dao.insertPostReaction(reactionEntity)
+
+      val likeDelta = if (hadPreviousReaction) 0 else 1
+      dao.updatePost(
+        post.copy(
+          myReaction = reaction.name,
+          likesCount = post.likesCount + likeDelta
+        )
+      )
+
+      // Send notification to post author if not self
+      if (post.authorId != userId) {
+        val userActor = dao.getUserById(userId).first()
+        dao.insertNotification(
+          NotificationEntity(
+            id = "notif_" + UUID.randomUUID().toString().take(8),
+            type = "LIKE",
+            actorName = userActor?.fullName ?: "Someone",
+            actorAvatar = userActor?.avatarUrl ?: "",
+            isActorVerified = userActor?.isVerified ?: false,
+            messageSnippet = "reacted ${reaction.emoji} to your post.",
+            timestamp = now,
+            isRead = false,
+            targetPostId = postId,
+            recipientId = post.authorId,
+            senderId = userId
+          )
+        )
+      }
+    }
   }
 
   suspend fun toggleSavePost(postId: String) {
@@ -1376,6 +1477,61 @@ class SocivaRepository(
     return true
   }
 
+  fun getPostReactionUsers(postId: String, currentUserId: String = "user_me"): Flow<List<PostReactionUser>> {
+    val reactionsAndUsersFlow = combine(
+      dao.getReactionsForPost(postId),
+      dao.getAllUsers()
+    ) { reactions, users ->
+      Pair(reactions, users)
+    }
+
+    val relationshipsFlow = combine(
+      dao.getFriendshipsForUser(currentUserId),
+      dao.getSentFriendRequests(currentUserId),
+      dao.getIncomingFriendRequests(currentUserId),
+      dao.getFollowsForUser(currentUserId)
+    ) { friendships, sentRequests, incomingRequests, follows ->
+      RelationshipContext(
+        friendIds = friendships.map { it.friendId }.toSet(),
+        sentReqTargetIds = sentRequests.map { it.receiverId }.toSet(),
+        incomingReqMap = incomingRequests.associateBy { it.senderId },
+        followingIds = follows.map { it.followingId }.toSet()
+      )
+    }
+
+    return combine(reactionsAndUsersFlow, relationshipsFlow) { (reactions, users), relCtx ->
+      val userMap = users.associateBy { it.id }
+
+      reactions.mapNotNull { reactionEntity ->
+        val userEntity = userMap[reactionEntity.userId] ?: return@mapNotNull null
+        val reactionType = try {
+          ReactionType.valueOf(reactionEntity.reactionType)
+        } catch (e: Exception) {
+          ReactionType.LIKE
+        }
+
+        val relationship = when {
+          userEntity.id == currentUserId -> ReactionRelationshipStatus.YOU
+          relCtx.friendIds.contains(userEntity.id) -> ReactionRelationshipStatus.FRIEND
+          relCtx.incomingReqMap.containsKey(userEntity.id) -> ReactionRelationshipStatus.REQUEST_RECEIVED
+          relCtx.sentReqTargetIds.contains(userEntity.id) -> ReactionRelationshipStatus.REQUEST_SENT
+          relCtx.followingIds.contains(userEntity.id) -> ReactionRelationshipStatus.FOLLOWING
+          else -> ReactionRelationshipStatus.CAN_ADD_FRIEND
+        }
+
+        PostReactionUser(
+          reactionId = reactionEntity.id,
+          postId = reactionEntity.postId,
+          user = userEntity.toDomain(),
+          reactionType = reactionType,
+          createdAt = reactionEntity.createdAt,
+          relationshipStatus = relationship,
+          incomingRequestId = relCtx.incomingReqMap[userEntity.id]?.id
+        )
+      }
+    }
+  }
+
   // --- Pages ---
   val pages: Flow<List<SocivaPage>> = dao.getAllPages().map { list ->
     list.map { it.toDomain() }
@@ -1512,6 +1668,15 @@ private fun UserEntity.toDomain() = User(
   hometown = hometown,
   currentCity = currentCity,
   country = country,
+  currentRegion = currentRegion,
+  currentCountryCode = currentCountryCode,
+  currentLatitude = currentLatitude,
+  currentLongitude = currentLongitude,
+  hometownRegion = hometownRegion,
+  hometownCountryCode = hometownCountryCode,
+  hometownLatitude = hometownLatitude,
+  hometownLongitude = hometownLongitude,
+  countryCode = countryCode,
   workplace = workplace,
   workPosition = workPosition,
   workStartDate = workStartDate,
@@ -1538,7 +1703,15 @@ private fun UserEntity.toDomain() = User(
   reviewTagsBeforeAppearing = reviewTagsBeforeAppearing
 )
 
-private fun PostEntity.toDomain(taggedUsers: List<TaggedUser> = emptyList()) = Post(
+private fun PostEntity.toDomain(
+  taggedUsers: List<TaggedUser> = emptyList(),
+  topReactionEmojis: List<String> = emptyList(),
+  reactionTypeCounts: Map<ReactionType, Int> = emptyMap(),
+  computedLikesCount: Int = likesCount,
+  currentMyReaction: ReactionType? = myReaction?.let {
+    try { ReactionType.valueOf(it) } catch (e: Exception) { null }
+  }
+) = Post(
   id = id,
   authorId = authorId,
   authorName = authorName,
@@ -1554,14 +1727,14 @@ private fun PostEntity.toDomain(taggedUsers: List<TaggedUser> = emptyList()) = P
     "Only Me" -> PostAudience.ONLY_ME
     else -> PostAudience.PUBLIC
   },
-  likesCount = likesCount,
+  likesCount = computedLikesCount,
   commentsCount = commentsCount,
   sharesCount = sharesCount,
-  myReaction = myReaction?.let {
-    try { ReactionType.valueOf(it) } catch (e: Exception) { null }
-  },
+  myReaction = currentMyReaction,
   isSaved = isSaved,
-  taggedUsers = taggedUsers
+  taggedUsers = taggedUsers,
+  topReactionEmojis = topReactionEmojis,
+  reactionTypeCounts = reactionTypeCounts
 )
 
 private fun CommentEntity.toDomain(

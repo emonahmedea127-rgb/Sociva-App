@@ -85,7 +85,8 @@ fun SavedPostsScreen(
             onDeleteClick = { viewModel.deletePost(post.id) },
             onReportClick = {
               viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
-            }
+            },
+            onReactionsClick = { viewModel.openReactionsModal(post.id) }
           )
         }
       }

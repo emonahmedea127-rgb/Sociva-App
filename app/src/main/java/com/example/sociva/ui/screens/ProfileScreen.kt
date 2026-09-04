@@ -680,7 +680,8 @@ fun ProfileScreen(
                 onReportClick = {
                   viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
                 },
-                onRemoveTagClick = { viewModel.removePostTag(post.id) }
+                onRemoveTagClick = { viewModel.removePostTag(post.id) },
+                onReactionsClick = { viewModel.openReactionsModal(post.id) }
               )
             }
           }
@@ -762,20 +763,46 @@ fun ProfileScreen(
                   ) {
                     Text("Places Lived", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                    val currentCity = user?.currentCity?.ifBlank { null } ?: user?.location
-                    if (!currentCity.isNullOrBlank()) {
-                      AboutInfoRow(icon = Icons.Default.Home, title = "Lives in", value = currentCity)
+                    val currentCityFormatted = buildString {
+                      val baseCity = user?.currentCity?.ifBlank { null } ?: user?.location?.ifBlank { null }
+                      if (!baseCity.isNullOrBlank()) {
+                        append(baseCity)
+                        val extra = listOfNotNull(
+                          user?.currentRegion?.ifBlank { null },
+                          user?.currentCountryCode?.ifBlank { null }
+                        ).joinToString(", ")
+                        if (extra.isNotBlank() && !baseCity.contains(extra)) {
+                          append(" ($extra)")
+                        }
+                      }
+                    }
+                    if (currentCityFormatted.isNotBlank()) {
+                      AboutInfoRow(icon = Icons.Default.Home, title = "Lives in", value = currentCityFormatted)
                     }
 
-                    if (!user?.hometown.isNullOrBlank()) {
-                      AboutInfoRow(icon = Icons.Default.LocationOn, title = "From (Hometown)", value = user?.hometown ?: "")
+                    val hometownFormatted = buildString {
+                      if (!user?.hometown.isNullOrBlank()) {
+                        append(user?.hometown)
+                        val extra = listOfNotNull(
+                          user?.hometownRegion?.ifBlank { null },
+                          user?.hometownCountryCode?.ifBlank { null }
+                        ).joinToString(", ")
+                        if (extra.isNotBlank() && !user?.hometown!!.contains(extra)) {
+                          append(" ($extra)")
+                        }
+                      }
+                    }
+                    if (hometownFormatted.isNotBlank()) {
+                      AboutInfoRow(icon = Icons.Default.LocationOn, title = "From (Hometown)", value = hometownFormatted)
                     }
 
                     if (!user?.country.isNullOrBlank()) {
-                      AboutInfoRow(icon = Icons.Default.Public, title = "Country", value = user?.country ?: "")
+                      val flag = CountryHelper.getFlagForCountry(user?.country ?: "")
+                      val countryValue = if (flag.isNotBlank()) "$flag ${user?.country}" else user?.country ?: ""
+                      AboutInfoRow(icon = Icons.Default.Public, title = "Country", value = countryValue)
                     }
 
-                    if (currentCity.isNullOrBlank() && user?.hometown.isNullOrBlank() && user?.country.isNullOrBlank()) {
+                    if (currentCityFormatted.isBlank() && hometownFormatted.isBlank() && user?.country.isNullOrBlank()) {
                       Text("No places to show", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                   }
@@ -783,7 +810,7 @@ fun ProfileScreen(
               }
 
               // Section C: Relationship Status (Privacy Checked)
-              if (canView(user?.relationshipPrivacy ?: "Public")) {
+              if (canView(user?.relationshipPrivacy ?: "Public") && !user?.relationshipStatus.isNullOrBlank()) {
                 Card(
                   modifier = Modifier.fillMaxWidth(),
                   shape = RoundedCornerShape(16.dp),
@@ -796,7 +823,7 @@ fun ProfileScreen(
                     Text("Relationship", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                     val relValue = buildString {
-                      append(user?.relationshipStatus ?: "Single")
+                      append(user?.relationshipStatus)
                       if (!user?.relationshipPartnerName.isNullOrBlank()) {
                         append(" with ${user?.relationshipPartnerName}")
                       }
@@ -837,11 +864,13 @@ fun ProfileScreen(
                     AboutInfoRow(icon = Icons.Default.Badge, title = "Pronouns", value = user?.pronouns ?: "")
                   }
 
-                  AboutInfoRow(
-                    icon = Icons.Default.CalendarToday,
-                    title = "Joined Sociva",
-                    value = user?.joinedDate ?: "March 2024"
-                  )
+                  if (!user?.joinedDate.isNullOrBlank()) {
+                    AboutInfoRow(
+                      icon = Icons.Default.CalendarToday,
+                      title = "Joined Sociva",
+                      value = user?.joinedDate ?: ""
+                    )
+                  }
                 }
               }
 
@@ -958,7 +987,8 @@ fun ProfileScreen(
                 onReportClick = {
                   viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
                 },
-                onRemoveTagClick = { viewModel.removePostTag(post.id) }
+                onRemoveTagClick = { viewModel.removePostTag(post.id) },
+                onReactionsClick = { viewModel.openReactionsModal(post.id) }
               )
             }
           }

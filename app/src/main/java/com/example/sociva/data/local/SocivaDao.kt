@@ -38,6 +38,24 @@ interface SocivaDao {
   @Query("UPDATE posts SET authorAvatar = :avatarUrl WHERE authorId = :userId")
   suspend fun updateAuthorAvatarInPosts(userId: String, avatarUrl: String)
 
+  @Query("UPDATE posts SET authorName = :name, authorUsername = :username WHERE authorId = :userId")
+  suspend fun updateAuthorInfoInPosts(userId: String, name: String, username: String)
+
+  @Query("UPDATE comments SET authorName = :name WHERE user_id = :userId")
+  suspend fun updateAuthorNameInComments(userId: String, name: String)
+
+  @Query("UPDATE stories SET userName = :name WHERE userId = :userId")
+  suspend fun updateUserNameInStories(userId: String, name: String)
+
+  @Query("UPDATE reels SET creatorName = :name, creatorUsername = :username WHERE creatorId = :userId")
+  suspend fun updateCreatorInReels(userId: String, name: String, username: String)
+
+  @Query("UPDATE conversations SET participantName = :name WHERE participantId = :userId")
+  suspend fun updateParticipantInConversations(userId: String, name: String)
+
+  @Query("UPDATE users SET relationshipPartnerName = :name WHERE relationshipPartnerId = :userId")
+  suspend fun updatePartnerNameInUsers(userId: String, name: String)
+
   @Query("UPDATE comments SET authorAvatar = :avatarUrl WHERE user_id = :userId")
   suspend fun updateAuthorAvatarInComments(userId: String, avatarUrl: String)
 
@@ -148,6 +166,40 @@ interface SocivaDao {
 
   @Query("DELETE FROM comment_reactions WHERE comment_id = :commentId")
   suspend fun deleteReactionsForComment(commentId: String)
+
+  // Post Reactions
+  @Query("SELECT * FROM post_reactions ORDER BY created_at DESC")
+  fun getAllPostReactions(): Flow<List<PostReactionEntity>>
+
+  @Query("SELECT * FROM post_reactions WHERE post_id = :postId ORDER BY created_at DESC")
+  fun getReactionsForPost(postId: String): Flow<List<PostReactionEntity>>
+
+  @Query("SELECT * FROM post_reactions WHERE post_id = :postId AND reaction_type = :reactionType ORDER BY created_at DESC")
+  fun getReactionsForPostByType(postId: String, reactionType: String): Flow<List<PostReactionEntity>>
+
+  @Query("SELECT * FROM post_reactions WHERE post_id = :postId AND user_id = :userId LIMIT 1")
+  fun getPostReaction(postId: String, userId: String): Flow<PostReactionEntity?>
+
+  @Query("SELECT * FROM post_reactions WHERE post_id = :postId AND user_id = :userId LIMIT 1")
+  suspend fun findPostReaction(postId: String, userId: String): PostReactionEntity?
+
+  @Query("SELECT COUNT(*) FROM post_reactions WHERE post_id = :postId")
+  suspend fun countReactionsForPost(postId: String): Int
+
+  @Query("SELECT COUNT(*) FROM post_reactions WHERE post_id = :postId AND reaction_type = :reactionType")
+  suspend fun countReactionsForPostByType(postId: String, reactionType: String): Int
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPostReaction(reaction: PostReactionEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPostReactions(reactions: List<PostReactionEntity>)
+
+  @Query("DELETE FROM post_reactions WHERE post_id = :postId AND user_id = :userId")
+  suspend fun deletePostReaction(postId: String, userId: String)
+
+  @Query("DELETE FROM post_reactions WHERE post_id = :postId")
+  suspend fun deleteReactionsForPost(postId: String)
 
   // Stories
   @Query("SELECT * FROM stories WHERE expiresAt > :currentTime ORDER BY timestamp DESC")

@@ -76,6 +76,9 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   private val _commentsPostId = MutableStateFlow<String?>(null)
   val commentsPostId: StateFlow<String?> = _commentsPostId.asStateFlow()
 
+  private val _reactionsModalPostId = MutableStateFlow<String?>(null)
+  val reactionsModalPostId: StateFlow<String?> = _reactionsModalPostId.asStateFlow()
+
   // Search State
   private val _searchQuery = MutableStateFlow("")
   val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -94,11 +97,13 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   private val _currentLanguage = MutableStateFlow("English")
   val currentLanguage: StateFlow<String> = _currentLanguage.asStateFlow()
 
+  private val prefs = getApplication<Application>().getSharedPreferences("sociva_session", android.content.Context.MODE_PRIVATE)
+
   // Authentication & Current User State
-  private val _currentUserId = MutableStateFlow("user_me")
+  private val _currentUserId = MutableStateFlow(prefs.getString("auth_user_id", "user_me") ?: "user_me")
   val currentUserId: StateFlow<String> = _currentUserId.asStateFlow()
 
-  private val _isLoggedIn = MutableStateFlow(true)
+  private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", true))
   val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
   init {
@@ -191,7 +196,7 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   val currentUser: StateFlow<User?> = _currentUserId.flatMapLatest { uid ->
     repository.getUser(uid)
   }.stateIn(
-    viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    viewModelScope, SharingStarted.Eagerly, null
   )
 
   fun getPostComments(postId: String): Flow<List<Comment>> {
@@ -271,6 +276,18 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     _commentsPostId.value = null
   }
 
+  fun openReactionsModal(postId: String) {
+    _reactionsModalPostId.value = postId
+  }
+
+  fun closeReactionsModal() {
+    _reactionsModalPostId.value = null
+  }
+
+  fun getPostReactionUsers(postId: String): Flow<List<PostReactionUser>> {
+    return repository.getPostReactionUsers(postId, _currentUserId.value)
+  }
+
   fun setSearchQuery(query: String) {
     _searchQuery.value = query
   }
@@ -309,16 +326,29 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
       val usernamePart = email.substringBefore("@")
       val match = users.find {
         it.username.equals(usernamePart, ignoreCase = true) ||
-        it.fullName.contains(usernamePart, ignoreCase = true)
+        it.fullName.contains(usernamePart, ignoreCase = true) ||
+        it.email.equals(email, ignoreCase = true)
       }
-      if (match != null) {
-        _currentUserId.value = match.id
-        repository.setUserPresence(match.id, isOnline = true)
+      val targetId = if (match != null) {
+        match.id
       } else {
-        repository.setUserPresence(_currentUserId.value, isOnline = true)
+        val newId = "user_" + usernamePart.lowercase().replace("[^a-z0-9]".toRegex(), "").ifBlank { "member" }
+        val newUser = com.example.sociva.data.local.UserEntity(
+          id = newId,
+          username = usernamePart.lowercase(),
+          fullName = usernamePart.replaceFirstChar { it.uppercase() },
+          email = email,
+          joinedDate = "Joined recently"
+        )
+        repository.insertUser(newUser)
+        newId
       }
+      _currentUserId.value = targetId
+      _activeProfileUserId.value = targetId
+      prefs.edit().putString("auth_user_id", targetId).putBoolean("is_logged_in", true).apply()
+      repository.setUserPresence(targetId, isOnline = true)
     }
-    showToast("Welcome back to Sociva, $email!")
+    showToast("Welcome to Sociva, $email!")
   }
 
   fun logout() {
@@ -327,6 +357,7 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
       repository.setUserPresence(uid, isOnline = false)
     }
     _isLoggedIn.value = false
+    prefs.edit().putBoolean("is_logged_in", false).apply()
     showToast("You have been logged out.")
   }
 
@@ -335,6 +366,8 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch {
       repository.setUserPresence(prev, isOnline = false)
       _currentUserId.value = userId
+      _activeProfileUserId.value = userId
+      prefs.edit().putString("auth_user_id", userId).apply()
       repository.setUserPresence(userId, isOnline = true)
       val user = repository.getUser(userId).first()
       showToast("Active user: ${user?.fullName ?: userId}")
@@ -757,6 +790,22 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
       repository.updateFullUserProfile(updated)
       showToast("Profile updated successfully! ✨")
     }
+  }
+
+  suspend fun saveUserProfile(updated: User): Result<Unit> {
+    return try {
+      repository.updateFullUserProfile(updated)
+      showToast("Profile updated successfully! ✨")
+      Result.success(Unit)
+    } catch (e: Exception) {
+      showToast("Error updating profile: ${e.message}")
+      Result.failure(e)
+    }
+  }
+
+  fun navigateToMyProfile() {
+    _activeProfileUserId.value = _currentUserId.value
+    _activeScreen.value = SocivaScreen.PROFILE
   }
 
   // --- Relationship Management ---

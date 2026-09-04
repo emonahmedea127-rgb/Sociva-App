@@ -37,6 +37,7 @@ fun SocivaApp(
   val toastMessage by viewModel.toastMessage.collectAsState()
   val isLoggedIn by viewModel.isLoggedIn.collectAsState()
   val commentsPostId by viewModel.commentsPostId.collectAsState()
+  val reactionsModalPostId by viewModel.reactionsModalPostId.collectAsState()
   val activeProfileUserId by viewModel.activeProfileUserId.collectAsState()
   val activeConversationId by viewModel.activeConversationId.collectAsState()
   val notifications by viewModel.notifications.collectAsState()
@@ -315,6 +316,15 @@ fun SocivaApp(
       postId = commentsPostId!!,
       viewModel = viewModel,
       onDismiss = { viewModel.closeComments() }
+    )
+  }
+
+  // Reactions Bottom Sheet
+  if (reactionsModalPostId != null) {
+    PostReactionsBottomSheet(
+      postId = reactionsModalPostId!!,
+      viewModel = viewModel,
+      onDismiss = { viewModel.closeReactionsModal() }
     )
   }
 }

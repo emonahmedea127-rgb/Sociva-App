@@ -10,9 +10,9 @@ data class UserEntity(
   @PrimaryKey val id: String,
   val username: String,
   val fullName: String,
-  val avatarUrl: String,
-  val coverUrl: String,
-  val bio: String,
+  val avatarUrl: String = "",
+  val coverUrl: String = "",
+  val bio: String = "",
   val isVerified: Boolean = false,
   val followersCount: Int = 0,
   val followingCount: Int = 0,
@@ -41,6 +41,15 @@ data class UserEntity(
   val hometown: String = "",
   val currentCity: String = "",
   val country: String = "",
+  val currentRegion: String = "",
+  val currentCountryCode: String = "",
+  val currentLatitude: Double? = null,
+  val currentLongitude: Double? = null,
+  val hometownRegion: String = "",
+  val hometownCountryCode: String = "",
+  val hometownLatitude: Double? = null,
+  val hometownLongitude: Double? = null,
+  val countryCode: String = "",
   // Work Information
   val workplace: String = "",
   val workPosition: String = "",
@@ -58,7 +67,7 @@ data class UserEntity(
   val email: String = "",
   val phone: String = "",
   // Relationship Status & Partner
-  val relationshipStatus: String = "Single",
+  val relationshipStatus: String = "",
   val relationshipPartnerId: String? = null,
   val relationshipPartnerName: String? = null,
   val customRelationshipText: String? = null,
@@ -90,6 +99,22 @@ data class PostEntity(
   val sharesCount: Int = 0,
   val myReaction: String? = null,
   val isSaved: Boolean = false
+)
+
+@Entity(
+  tableName = "post_reactions",
+  indices = [
+    Index(value = ["post_id", "user_id"], unique = true),
+    Index(value = ["post_id"]),
+    Index(value = ["user_id"])
+  ]
+)
+data class PostReactionEntity(
+  @PrimaryKey val id: String,
+  @ColumnInfo(name = "post_id") val postId: String,
+  @ColumnInfo(name = "user_id") val userId: String,
+  @ColumnInfo(name = "reaction_type") val reactionType: String,
+  @ColumnInfo(name = "created_at") val createdAt: Long
 )
 
 @Entity(

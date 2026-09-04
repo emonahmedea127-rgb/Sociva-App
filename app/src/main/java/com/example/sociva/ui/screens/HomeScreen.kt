@@ -136,7 +136,8 @@ fun HomeScreen(
         onReportClick = {
           viewModel.submitReport("Post", post.id, post.content.take(40), "Inappropriate or spam content")
         },
-        onRemoveTagClick = { viewModel.removePostTag(post.id) }
+        onRemoveTagClick = { viewModel.removePostTag(post.id) },
+        onReactionsClick = { viewModel.openReactionsModal(post.id) }
       )
     }
   }
@@ -478,7 +479,8 @@ fun PostCard(
   onAuthorClick: () -> Unit,
   onDeleteClick: () -> Unit,
   onReportClick: () -> Unit,
-  onRemoveTagClick: (() -> Unit)? = null
+  onRemoveTagClick: (() -> Unit)? = null,
+  onReactionsClick: (() -> Unit)? = null
 ) {
   var showMenu by remember { mutableStateOf(false) }
   var showReactionPicker by remember { mutableStateOf(false) }
@@ -671,15 +673,36 @@ fun PostCard(
         if (post.likesCount > 0) {
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .then(
+                if (onReactionsClick != null) {
+                  Modifier
+                    .clickable { onReactionsClick() }
+                    .testTag("post_reactions_count_${post.id}")
+                } else Modifier
+              )
+              .padding(horizontal = 4.dp, vertical = 2.dp)
           ) {
-            Text(
-              text = post.myReaction?.emoji ?: "👍",
-              fontSize = 14.sp
-            )
+            // Display top reaction emojis (e.g. ❤️ 👍 😂)
+            val displayEmojis = if (post.topReactionEmojis.isNotEmpty()) {
+              post.topReactionEmojis.take(3)
+            } else {
+              listOf(post.myReaction?.emoji ?: "❤️")
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
+              displayEmojis.forEach { emoji ->
+                Text(text = emoji, fontSize = 14.sp)
+              }
+            }
+
+            Spacer(modifier = Modifier.width(2.dp))
             Text(
               text = "${post.likesCount}",
               style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
