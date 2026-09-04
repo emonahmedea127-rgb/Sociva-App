@@ -375,11 +375,24 @@ data class ReportItem(
 )
 
 data class UserSettings(
-  val language: String = "English",
-  val appearance: String = "System", // Light, Dark, System
-  val audienceDefault: String = "Public",
+  val userId: String = "user_me",
   val twoFactorEnabled: Boolean = false,
-  val dataSaverEnabled: Boolean = false
+  val twoFactorMethod: String = "AUTHENTICATOR", // "AUTHENTICATOR" or "SMS"
+  val profileVisibility: String = "Public", // "Public", "Friends", "Only Me"
+  val darkTheme: Boolean = false,
+  val dataSaver: Boolean = false,
+  val pushNotifications: Boolean = true,
+  val inAppSounds: Boolean = true,
+  val language: String = "English",
+  val passwordLastUpdated: Long = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
+)
+
+data class BlockedUser(
+  val id: String,
+  val blockerId: String,
+  val blockedId: String,
+  val blockedUser: User,
+  val createdAt: Long = System.currentTimeMillis()
 )
 
 data class RelationshipContext(

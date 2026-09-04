@@ -47,11 +47,14 @@ fun HomeScreen(
   val stories by viewModel.activeStories.collectAsState()
   val currentUser by viewModel.currentUser.collectAsState()
   val friends by viewModel.friends.collectAsState()
+  val blockedUsers by viewModel.blockedUsers.collectAsState()
   val context = LocalContext.current
 
+  val blockedUserIds: Set<String> = remember(blockedUsers) { blockedUsers.map { it.blockedId }.toSet() }
   val friendIds = remember(friends) { friends.map { it.id }.toSet() }
-  val visiblePosts = remember(posts, currentUser, friendIds) {
+  val visiblePosts = remember(posts, currentUser, friendIds, blockedUserIds) {
     posts.filter { post ->
+      if (post.authorId in blockedUserIds) return@filter false
       val isMyPost = post.authorId == currentUser?.id
       if (isMyPost) return@filter true
       when (post.audience) {
@@ -60,6 +63,10 @@ fun HomeScreen(
         PostAudience.PUBLIC -> true
       }
     }
+  }
+
+  val visibleStories = remember(stories, blockedUserIds) {
+    stories.filter { it.userId !in blockedUserIds }
   }
 
   // 1. Direct Story Media Picker Launcher (Home -> Create Story -> Native Picker -> Story Editor)
@@ -111,7 +118,7 @@ fun HomeScreen(
     // 2. Stories Carousel
     item {
       StoriesSection(
-        stories = stories,
+        stories = visibleStories,
         currentUser = currentUser,
         onCreateStory = {
           storyMediaPickerLauncher.launch(

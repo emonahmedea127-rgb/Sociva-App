@@ -106,9 +106,26 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("is_logged_in", true))
   val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
+  val userSettings: StateFlow<UserSettings> = _currentUserId.flatMapLatest { uid ->
+    repository.getUserSettings(uid)
+  }.stateIn(
+    viewModelScope, SharingStarted.Eagerly, UserSettings(userId = _currentUserId.value)
+  )
+
+  val blockedUsers: StateFlow<List<BlockedUser>> = _currentUserId.flatMapLatest { uid ->
+    repository.getBlockedUsers(uid)
+  }.stateIn(
+    viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+  )
+
   init {
     viewModelScope.launch {
       repository.setUserPresence(_currentUserId.value, isOnline = true)
+    }
+    viewModelScope.launch {
+      userSettings.collect { settings ->
+        _isDarkTheme.value = settings.darkTheme
+      }
     }
   }
 
@@ -216,6 +233,11 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
 
   fun getUser(userId: String): Flow<User?> = repository.getUser(userId)
 
+  fun isUserBlockedFlow(userId: String): Flow<Boolean> {
+    val uid = _currentUserId.value
+    return repository.isUserBlockedFlow(uid, userId)
+  }
+
   fun getPostsByUser(userId: String): Flow<List<Post>> = repository.getPostsByUser(userId)
 
   // Navigation Methods
@@ -305,11 +327,88 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   }
 
   fun toggleTheme(dark: Boolean?) {
-    _isDarkTheme.value = dark
-    if (dark == false) {
-      showToast("Light mode enabled ☀️")
-    } else if (dark == true) {
+    val enabled = dark == true
+    _isDarkTheme.value = enabled
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.updateDarkTheme(uid, enabled)
+    }
+    if (enabled) {
       showToast("Dark mode enabled 🌙")
+    } else {
+      showToast("Light mode enabled ☀️")
+    }
+  }
+
+  fun updateDataSaver(enabled: Boolean) {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.updateDataSaver(uid, enabled)
+    }
+    showToast(if (enabled) "Data Saver enabled" else "Data Saver disabled")
+  }
+
+  fun updatePushNotifications(enabled: Boolean) {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.updatePushNotifications(uid, enabled)
+    }
+    showToast(if (enabled) "Push notifications enabled" else "Push notifications disabled")
+  }
+
+  fun updateInAppSounds(enabled: Boolean) {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.updateInAppSounds(uid, enabled)
+    }
+    showToast(if (enabled) "In-app sounds enabled 🔊" else "In-app sounds muted 🔇")
+  }
+
+  fun updateProfileVisibility(visibility: String) {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.updateProfileVisibility(uid, visibility)
+    }
+    showToast("Profile visibility set to $visibility")
+  }
+
+  fun updateTwoFactor(enabled: Boolean, method: String = "AUTHENTICATOR") {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.updateTwoFactor(uid, enabled, method)
+    }
+    showToast(if (enabled) "Two-Factor Authentication activated ($method) 🛡️" else "2FA deactivated")
+  }
+
+  fun changePassword() {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      repository.updatePassword(uid)
+    }
+    showToast("Password updated successfully 🔒")
+  }
+
+  fun blockUser(targetUserId: String) {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      val targetUser = repository.getUser(targetUserId).first()
+      val name = targetUser?.fullName ?: "User"
+      val success = repository.blockUser(uid, targetUserId)
+      if (success) {
+        showToast("Blocked $name. They cannot view your profile or message you.")
+      } else {
+        showToast("Could not block user.")
+      }
+    }
+  }
+
+  fun unblockUser(targetUserId: String) {
+    val uid = _currentUserId.value
+    viewModelScope.launch {
+      val targetUser = repository.getUser(targetUserId).first()
+      val name = targetUser?.fullName ?: "User"
+      repository.unblockUser(uid, targetUserId)
+      showToast("Unblocked $name.")
     }
   }
 

@@ -75,10 +75,13 @@ fun ProfileScreen(
   var currentCropType by remember { mutableStateOf(CropType.PROFILE) }
 
   val isMyProfile = (userId == currentUser?.id || userId == "user_me")
+  val isUserBlocked by viewModel.isUserBlockedFlow(userId).collectAsState(initial = false)
   val friendStatus by viewModel.getFriendStatusFlow(userId).collectAsState(initial = FriendStatus.NONE)
   val isFollowing by viewModel.isFollowingFlow(userId).collectAsState(initial = false)
   var showCancelRequestDialog by remember { mutableStateOf(false) }
   var showRemoveFriendDialog by remember { mutableStateOf(false) }
+  var showBlockDialog by remember { mutableStateOf(false) }
+  var showUnblockDialog by remember { mutableStateOf(false) }
   val context = LocalContext.current
   val coroutineScope = rememberCoroutineScope()
 
@@ -121,6 +124,36 @@ fun ProfileScreen(
         actions = {
           IconButton(onClick = { viewModel.showToast("Profile link copied to clipboard!") }) {
             Icon(Icons.Default.Share, contentDescription = "Share Profile")
+          }
+          if (!isMyProfile) {
+            var showMenu by remember { mutableStateOf(false) }
+            IconButton(onClick = { showMenu = true }) {
+              Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+            }
+            DropdownMenu(
+              expanded = showMenu,
+              onDismissRequest = { showMenu = false }
+            ) {
+              if (isUserBlocked) {
+                DropdownMenuItem(
+                  text = { Text("Unblock User") },
+                  onClick = {
+                    showMenu = false
+                    showUnblockDialog = true
+                  },
+                  leadingIcon = { Icon(Icons.Default.LockOpen, contentDescription = null) }
+                )
+              } else {
+                DropdownMenuItem(
+                  text = { Text("Block User", color = MaterialTheme.colorScheme.error) },
+                  onClick = {
+                    showMenu = false
+                    showBlockDialog = true
+                  },
+                  leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+                )
+              }
+            }
           }
         }
       )
@@ -464,6 +497,43 @@ fun ProfileScreen(
                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Edit Profile", fontWeight = FontWeight.Bold)
+              }
+            }
+          } else if (isUserBlocked) {
+            // User is currently blocked
+            Card(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+              colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f)),
+              shape = RoundedCornerShape(12.dp)
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  modifier = Modifier.weight(1f)
+                ) {
+                  Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                  Column {
+                    Text("User Blocked", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text("You have blocked this account.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                  }
+                }
+                Button(
+                  onClick = { showUnblockDialog = true },
+                  colors = ButtonDefaults.buttonColors(containerColor = SocivaBlue),
+                  shape = RoundedCornerShape(10.dp),
+                  modifier = Modifier.testTag("profile_unblock_button")
+                ) {
+                  Text("Unblock", fontWeight = FontWeight.SemiBold)
+                }
               }
             }
           } else {
@@ -1169,6 +1239,60 @@ fun ProfileScreen(
       },
       dismissButton = {
         TextButton(onClick = { showRemoveFriendDialog = false }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // 12. Block User Confirmation Dialog
+  if (showBlockDialog) {
+    AlertDialog(
+      onDismissRequest = { showBlockDialog = false },
+      title = { Text("Block ${user?.fullName ?: "User"}?") },
+      text = {
+        Text("They will no longer be able to:\n• See your posts or stories\n• Send you friend requests or messages\n• Tag you in posts\n\nBlocking also automatically cancels friendships and unfollows both ways.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showBlockDialog = false
+            viewModel.blockUser(userId)
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) {
+          Text("Block", fontWeight = FontWeight.Bold)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showBlockDialog = false }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
+
+  // 13. Unblock User Confirmation Dialog
+  if (showUnblockDialog) {
+    AlertDialog(
+      onDismissRequest = { showUnblockDialog = false },
+      title = { Text("Unblock ${user?.fullName ?: "User"}?") },
+      text = {
+        Text("They will be able to see your public posts, search for your profile, and send you friend requests or messages.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showUnblockDialog = false
+            viewModel.unblockUser(userId)
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = SocivaBlue)
+        ) {
+          Text("Unblock", fontWeight = FontWeight.Bold)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showUnblockDialog = false }) {
           Text("Cancel")
         }
       }

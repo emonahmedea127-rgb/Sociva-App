@@ -66,14 +66,22 @@ fun MessagesScreen(
   val activeNowUsers by viewModel.activeNowUsers.collectAsState()
   val currentUser by viewModel.currentUser.collectAsState()
   val allUsers by viewModel.allUsers.collectAsState()
+  val blockedUsers by viewModel.blockedUsers.collectAsState()
 
   var searchQuery by remember { mutableStateOf("") }
   var showNewMessageDialog by remember { mutableStateOf(false) }
   var showAccountSwitcherDialog by remember { mutableStateOf(false) }
 
-  val filteredConversations = remember(conversations, searchQuery) {
-    if (searchQuery.isBlank()) conversations
-    else conversations.filter {
+  val blockedUserIds: Set<String> = remember(blockedUsers) { blockedUsers.map { it.blockedId }.toSet() }
+
+  val visibleActiveNowUsers = remember(activeNowUsers, blockedUserIds) {
+    activeNowUsers.filter { it.id !in blockedUserIds }
+  }
+
+  val filteredConversations = remember(conversations, searchQuery, blockedUserIds) {
+    val unblocked = conversations.filter { it.participantId !in blockedUserIds }
+    if (searchQuery.isBlank()) unblocked
+    else unblocked.filter {
       it.participantName.contains(searchQuery, ignoreCase = true) ||
       it.participantUsername.contains(searchQuery, ignoreCase = true) ||
       it.lastMessage.contains(searchQuery, ignoreCase = true)
@@ -81,10 +89,11 @@ fun MessagesScreen(
   }
 
   // Also filter users when searching in case user wants to start a chat with someone not in recent conversations
-  val matchingUsers = remember(allUsers, searchQuery, currentUser) {
+  val matchingUsers = remember(allUsers, searchQuery, currentUser, blockedUserIds) {
     if (searchQuery.isBlank()) emptyList()
     else allUsers.filter { user ->
       user.id != currentUser?.id &&
+      user.id !in blockedUserIds &&
       (user.fullName.contains(searchQuery, ignoreCase = true) ||
        user.username.contains(searchQuery, ignoreCase = true))
     }
@@ -213,10 +222,10 @@ fun MessagesScreen(
         modifier = Modifier.fillMaxSize()
       ) {
         // Active Now Carousel (only show when not searching)
-        if (searchQuery.isBlank() && activeNowUsers.isNotEmpty()) {
+        if (searchQuery.isBlank() && visibleActiveNowUsers.isNotEmpty()) {
           item(key = "active_now_header") {
             Text(
-              text = "Active Now (${activeNowUsers.size})",
+              text = "Active Now (${visibleActiveNowUsers.size})",
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
               modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -229,7 +238,7 @@ fun MessagesScreen(
               horizontalArrangement = Arrangement.spacedBy(14.dp),
               modifier = Modifier.padding(bottom = 12.dp)
             ) {
-              items(activeNowUsers, key = { it.id }) { onlineUser ->
+              items(visibleActiveNowUsers, key = { it.id }) { onlineUser ->
                 Column(
                   horizontalAlignment = Alignment.CenterHorizontally,
                   modifier = Modifier
@@ -402,7 +411,7 @@ fun MessagesScreen(
   // Dialog: New Message / Start Chat with any real registered Sociva user
   if (showNewMessageDialog) {
     NewMessageDialog(
-      allUsers = allUsers.filter { it.id != currentUser?.id },
+      allUsers = allUsers.filter { it.id != currentUser?.id && it.id !in blockedUserIds },
       onDismiss = { showNewMessageDialog = false },
       onSelectUser = { targetUser ->
         showNewMessageDialog = false
@@ -572,6 +581,8 @@ fun ChatDetailScreen(
 
   val participantName = conversation?.participantName ?: "Chat"
   val isParticipantOnline = conversation?.isOnline == true
+  val participantId = conversation?.participantId ?: ""
+  val isParticipantBlocked by viewModel.isUserBlockedFlow(participantId).collectAsState(initial = false)
 
   Scaffold(
     topBar = {
@@ -649,124 +660,143 @@ fun ChatDetailScreen(
           .fillMaxWidth()
           .imePadding()
       ) {
-        Column {
-          // Real-time Typing Indicator bar
-          AnimatedVisibility(
-            visible = typingUsers.isNotEmpty(),
-            enter = fadeIn(),
-            exit = fadeOut()
-          ) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(8.dp)
-                  .clip(CircleShape)
-                  .background(SocivaBlue)
-              )
-              Text(
-                text = "$participantName is typing...",
-                style = MaterialTheme.typography.labelSmall,
-                color = SocivaBlue,
-                fontStyle = FontStyle.Italic
-              )
-            }
-          }
-
+        if (isParticipantBlocked) {
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 10.dp, vertical = 8.dp)
+              .padding(horizontal = 16.dp, vertical = 14.dp)
               .navigationBarsPadding(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.Center
           ) {
-            // Photo Picker Button
-            IconButton(
-              onClick = {
-                photoPickerLauncher.launch(
-                  PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
-              },
-              modifier = Modifier.size(38.dp)
-            ) {
-              Icon(
-                imageVector = Icons.Default.Image,
-                contentDescription = "Send photo",
-                tint = SocivaBlue
-              )
-            }
-
-            // Text input field
-            OutlinedTextField(
-              value = messageText,
-              onValueChange = { newText ->
-                messageText = newText
-                viewModel.setTyping(conversationId, newText.isNotBlank())
-              },
-              placeholder = { Text("Message...") },
-              shape = RoundedCornerShape(24.dp),
-              colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent
-              ),
-              modifier = Modifier
-                .weight(1f)
-                .testTag("chat_input_field"),
-              maxLines = 4
+            Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = "You have blocked this user. Unblock them to send messages.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.error
             )
-
-            // Send Button or Quick Like Thumbs Up 👍
-            if (messageText.isNotBlank()) {
-              IconButton(
-                onClick = {
-                  val textToSend = messageText
-                  messageText = ""
-                  viewModel.setTyping(conversationId, false)
-                  viewModel.sendMessage(
-                    convId = conversationId,
-                    text = textToSend,
-                    messageType = "TEXT"
-                  )
-                },
+          }
+        } else {
+          Column {
+            // Real-time Typing Indicator bar
+            AnimatedVisibility(
+              visible = typingUsers.isNotEmpty(),
+              enter = fadeIn(),
+              exit = fadeOut()
+            ) {
+              Row(
                 modifier = Modifier
-                  .size(42.dp)
-                  .clip(CircleShape)
-                  .background(
-                    Brush.horizontalGradient(listOf(SocivaBlue, SocivaIndigo))
-                  )
-                  .testTag("chat_send_button")
+                  .fillMaxWidth()
+                  .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
               ) {
-                Icon(
-                  imageVector = Icons.AutoMirrored.Filled.Send,
-                  contentDescription = "Send",
-                  tint = Color.White,
-                  modifier = Modifier.size(18.dp)
+                Box(
+                  modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(SocivaBlue)
+                )
+                Text(
+                  text = "$participantName is typing...",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = SocivaBlue,
+                  fontStyle = FontStyle.Italic
                 )
               }
-            } else {
+            }
+
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .navigationBarsPadding(),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              // Photo Picker Button
               IconButton(
                 onClick = {
-                  viewModel.sendMessage(
-                    convId = conversationId,
-                    text = "👍",
-                    messageType = "TEXT"
+                  photoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                   )
                 },
                 modifier = Modifier.size(38.dp)
               ) {
                 Icon(
-                  imageVector = Icons.Default.ThumbUp,
-                  contentDescription = "Thumbs Up",
+                  imageVector = Icons.Default.Image,
+                  contentDescription = "Send photo",
                   tint = SocivaBlue
                 )
+              }
+
+              // Text input field
+              OutlinedTextField(
+                value = messageText,
+                onValueChange = { newText ->
+                  messageText = newText
+                  viewModel.setTyping(conversationId, newText.isNotBlank())
+                },
+                placeholder = { Text("Message...") },
+                shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                  focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                  unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                  focusedBorderColor = Color.Transparent,
+                  unfocusedBorderColor = Color.Transparent
+                ),
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("chat_input_field"),
+                maxLines = 4
+              )
+
+              // Send Button or Quick Like Thumbs Up 👍
+              if (messageText.isNotBlank()) {
+                IconButton(
+                  onClick = {
+                    val textToSend = messageText
+                    messageText = ""
+                    viewModel.setTyping(conversationId, false)
+                    viewModel.sendMessage(
+                      convId = conversationId,
+                      text = textToSend,
+                      messageType = "TEXT"
+                    )
+                  },
+                  modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(
+                      Brush.horizontalGradient(listOf(SocivaBlue, SocivaIndigo))
+                    )
+                  .testTag("chat_send_button")
+                ) {
+                  Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = "Send",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                  )
+                }
+              } else {
+                IconButton(
+                  onClick = {
+                    viewModel.sendMessage(
+                      convId = conversationId,
+                      text = "👍",
+                      messageType = "TEXT"
+                    )
+                  },
+                  modifier = Modifier.size(38.dp)
+                ) {
+                  Icon(
+                    imageVector = Icons.Default.ThumbUp,
+                    contentDescription = "Thumbs Up",
+                    tint = SocivaBlue
+                  )
+                }
               }
             }
           }

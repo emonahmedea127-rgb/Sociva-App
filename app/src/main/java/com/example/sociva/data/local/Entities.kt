@@ -424,3 +424,34 @@ data class CommentMentionEntity(
   val createdAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "user_settings")
+data class UserSettingsEntity(
+  @PrimaryKey val userId: String,
+  val twoFactorEnabled: Boolean = false,
+  val twoFactorMethod: String = "AUTHENTICATOR", // "AUTHENTICATOR" or "SMS"
+  val profileVisibility: String = "Public", // "Public", "Friends", "Only Me"
+  val darkTheme: Boolean = false,
+  val dataSaver: Boolean = false,
+  val pushNotifications: Boolean = true,
+  val inAppSounds: Boolean = true,
+  val language: String = "English",
+  val passwordLastUpdated: Long = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000), // ~3 months ago
+  val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+  tableName = "blocked_users",
+  indices = [
+    Index(value = ["blockerId", "blockedId"], unique = true),
+    Index(value = ["blockerId"]),
+    Index(value = ["blockedId"])
+  ]
+)
+data class BlockedUserEntity(
+  @PrimaryKey val id: String,
+  val blockerId: String,
+  val blockedId: String,
+  val createdAt: Long = System.currentTimeMillis()
+)
+
+

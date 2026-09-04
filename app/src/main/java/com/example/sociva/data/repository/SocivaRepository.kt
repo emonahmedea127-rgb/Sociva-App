@@ -35,6 +35,23 @@ class SocivaRepository(
           dao.insertPostReactions(SeedData.postReactions)
         }
       }
+      // Ensure current user settings are seeded if missing
+      val existingSettings = dao.getUserSettingsSync("user_me")
+      if (existingSettings == null) {
+        dao.insertOrUpdateUserSettings(
+          UserSettingsEntity(
+            userId = "user_me",
+            twoFactorEnabled = false,
+            twoFactorMethod = "AUTHENTICATOR",
+            profileVisibility = "Public",
+            darkTheme = false,
+            dataSaver = false,
+            pushNotifications = true,
+            inAppSounds = true,
+            language = "English"
+          )
+        )
+      }
     }
   }
 
@@ -56,6 +73,19 @@ class SocivaRepository(
     dao.insertPages(SeedData.pages)
     dao.insertGroups(SeedData.groups)
     dao.insertReports(SeedData.reports)
+    dao.insertOrUpdateUserSettings(
+      UserSettingsEntity(
+        userId = "user_me",
+        twoFactorEnabled = false,
+        twoFactorMethod = "AUTHENTICATOR",
+        profileVisibility = "Public",
+        darkTheme = false,
+        dataSaver = false,
+        pushNotifications = true,
+        inAppSounds = true,
+        language = "English"
+      )
+    )
   }
 
   // --- Users ---
@@ -1632,9 +1662,134 @@ class SocivaRepository(
   suspend fun deleteReport(reportId: String) {
     dao.deleteReport(reportId)
   }
+
+  // --- Settings & Privacy ---
+  fun getUserSettings(userId: String = "user_me"): Flow<UserSettings> =
+    dao.getUserSettings(userId).map { entity ->
+      entity?.toDomain() ?: UserSettings(userId = userId)
+    }
+
+  suspend fun updateDarkTheme(userId: String = "user_me", enabled: Boolean) {
+    dao.updateDarkTheme(userId, enabled)
+  }
+
+  suspend fun updateDataSaver(userId: String = "user_me", enabled: Boolean) {
+    dao.updateDataSaver(userId, enabled)
+  }
+
+  suspend fun updatePushNotifications(userId: String = "user_me", enabled: Boolean) {
+    dao.updatePushNotifications(userId, enabled)
+  }
+
+  suspend fun updateInAppSounds(userId: String = "user_me", enabled: Boolean) {
+    dao.updateInAppSounds(userId, enabled)
+  }
+
+  suspend fun updateProfileVisibility(userId: String = "user_me", visibility: String) {
+    dao.updateProfileVisibility(userId, visibility)
+  }
+
+  suspend fun updateTwoFactor(userId: String = "user_me", enabled: Boolean, method: String = "AUTHENTICATOR") {
+    dao.updateTwoFactor(userId, enabled, method)
+  }
+
+  suspend fun updatePassword(userId: String = "user_me") {
+    dao.updatePasswordLastUpdated(userId)
+  }
+
+  // --- Blocking System ---
+  fun getBlockedUsers(blockerId: String = "user_me"): Flow<List<BlockedUser>> =
+    combine(dao.getBlockedUsersForUser(blockerId), dao.getAllUsers()) { blockedEntities, users ->
+      val userMap = users.associateBy { it.id }
+      blockedEntities.mapNotNull { entity ->
+        val targetUser = userMap[entity.blockedId]?.toDomain() ?: return@mapNotNull null
+        BlockedUser(
+          id = entity.id,
+          blockerId = entity.blockerId,
+          blockedId = entity.blockedId,
+          blockedUser = targetUser,
+          createdAt = entity.createdAt
+        )
+      }
+    }
+
+  fun isUserBlockedFlow(currentUserId: String = "user_me", targetUserId: String): Flow<Boolean> =
+    dao.isBlockedEitherWayFlow(currentUserId, targetUserId)
+
+  suspend fun isUserBlocked(currentUserId: String = "user_me", targetUserId: String): Boolean =
+    dao.isBlockedEitherWay(currentUserId, targetUserId)
+
+  suspend fun blockUser(blockerId: String = "user_me", blockedId: String): Boolean {
+    if (blockerId == blockedId) return false
+    val now = System.currentTimeMillis()
+
+    // 1. Insert Block
+    val blockEntity = BlockedUserEntity(
+      id = "blk_" + UUID.randomUUID().toString().take(8),
+      blockerId = blockerId,
+      blockedId = blockedId,
+      createdAt = now
+    )
+    dao.insertBlock(blockEntity)
+
+    // 2. Remove friendship in both directions
+    dao.deleteFriendshipBetween(blockerId, blockedId)
+
+    // 3. Remove all friend requests between them
+    dao.deleteFriendRequestsBetween(blockerId, blockedId)
+
+    // 4. Remove follows in both directions
+    dao.deleteFollow(blockerId, blockedId)
+    dao.deleteFollow(blockedId, blockerId)
+
+    // 5. Update friends & followers counts for both users
+    val blockerUser = dao.getUserById(blockerId).first()
+    val blockedUser = dao.getUserById(blockedId).first()
+    if (blockerUser != null) {
+      dao.updateUser(
+        blockerUser.copy(
+          friendsCount = dao.getFriendsCount(blockerId),
+          followingCount = dao.getFollowingCount(blockerId),
+          followersCount = dao.getFollowersCount(blockerId),
+          isFriend = false,
+          isFollowing = false
+        )
+      )
+    }
+    if (blockedUser != null) {
+      dao.updateUser(
+        blockedUser.copy(
+          friendsCount = dao.getFriendsCount(blockedId),
+          followingCount = dao.getFollowingCount(blockedId),
+          followersCount = dao.getFollowersCount(blockedId),
+          isFriend = false,
+          isFollowing = false
+        )
+      )
+    }
+
+    return true
+  }
+
+  suspend fun unblockUser(blockerId: String = "user_me", blockedId: String): Boolean {
+    dao.deleteBlock(blockerId, blockedId)
+    return true
+  }
 }
 
 // Entity to Domain mappers
+private fun UserSettingsEntity.toDomain() = UserSettings(
+  userId = userId,
+  twoFactorEnabled = twoFactorEnabled,
+  twoFactorMethod = twoFactorMethod,
+  profileVisibility = profileVisibility,
+  darkTheme = darkTheme,
+  dataSaver = dataSaver,
+  pushNotifications = pushNotifications,
+  inAppSounds = inAppSounds,
+  language = language,
+  passwordLastUpdated = passwordLastUpdated
+)
 private fun UserEntity.toDomain() = User(
   id = id,
   username = username,

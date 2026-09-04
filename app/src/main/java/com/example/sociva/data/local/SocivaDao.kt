@@ -531,5 +531,73 @@ interface SocivaDao {
 
   @Query("SELECT * FROM comment_mentions WHERE commentId = :commentId")
   suspend fun getCommentMentions(commentId: String): List<CommentMentionEntity>
+
+  // User Settings
+  @Query("SELECT * FROM user_settings WHERE userId = :userId LIMIT 1")
+  fun getUserSettings(userId: String): Flow<UserSettingsEntity?>
+
+  @Query("SELECT * FROM user_settings WHERE userId = :userId LIMIT 1")
+  suspend fun getUserSettingsSync(userId: String): UserSettingsEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertOrUpdateUserSettings(settings: UserSettingsEntity)
+
+  @Query("UPDATE user_settings SET darkTheme = :darkTheme, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updateDarkTheme(userId: String, darkTheme: Boolean, timestamp: Long = System.currentTimeMillis())
+
+  @Query("UPDATE user_settings SET dataSaver = :dataSaver, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updateDataSaver(userId: String, dataSaver: Boolean, timestamp: Long = System.currentTimeMillis())
+
+  @Query("UPDATE user_settings SET pushNotifications = :pushNotifications, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updatePushNotifications(userId: String, pushNotifications: Boolean, timestamp: Long = System.currentTimeMillis())
+
+  @Query("UPDATE user_settings SET inAppSounds = :inAppSounds, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updateInAppSounds(userId: String, inAppSounds: Boolean, timestamp: Long = System.currentTimeMillis())
+
+  @Query("UPDATE user_settings SET profileVisibility = :visibility, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updateProfileVisibility(userId: String, visibility: String, timestamp: Long = System.currentTimeMillis())
+
+  @Query("UPDATE user_settings SET twoFactorEnabled = :enabled, twoFactorMethod = :method, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updateTwoFactor(userId: String, enabled: Boolean, method: String, timestamp: Long = System.currentTimeMillis())
+
+  @Query("UPDATE user_settings SET passwordLastUpdated = :timestamp, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updatePasswordLastUpdated(userId: String, timestamp: Long = System.currentTimeMillis())
+
+  // Blocked Users
+  @Query("SELECT * FROM blocked_users WHERE blockerId = :blockerId ORDER BY createdAt DESC")
+  fun getBlockedUsersForUser(blockerId: String): Flow<List<BlockedUserEntity>>
+
+  @Query("SELECT * FROM blocked_users WHERE blockerId = :blockerId ORDER BY createdAt DESC")
+  suspend fun getBlockedUsersForUserSync(blockerId: String): List<BlockedUserEntity>
+
+  @Query("SELECT COUNT(*) > 0 FROM blocked_users WHERE blockerId = :blockerId AND blockedId = :blockedId")
+  fun isUserBlockedFlow(blockerId: String, blockedId: String): Flow<Boolean>
+
+  @Query("SELECT COUNT(*) > 0 FROM blocked_users WHERE blockerId = :blockerId AND blockedId = :blockedId")
+  suspend fun isUserBlocked(blockerId: String, blockedId: String): Boolean
+
+  @Query("SELECT COUNT(*) > 0 FROM blocked_users WHERE (blockerId = :userA AND blockedId = :userB) OR (blockerId = :userB AND blockedId = :userA)")
+  fun isBlockedEitherWayFlow(userA: String, userB: String): Flow<Boolean>
+
+  @Query("SELECT COUNT(*) > 0 FROM blocked_users WHERE (blockerId = :userA AND blockedId = :userB) OR (blockerId = :userB AND blockedId = :userA)")
+  suspend fun isBlockedEitherWay(userA: String, userB: String): Boolean
+
+  @Query("SELECT blockedId FROM blocked_users WHERE blockerId = :userId")
+  fun getBlockedUserIdsFlow(userId: String): Flow<List<String>>
+
+  @Query("SELECT blockedId FROM blocked_users WHERE blockerId = :userId")
+  suspend fun getBlockedUserIds(userId: String): List<String>
+
+  @Query("SELECT blockerId FROM blocked_users WHERE blockedId = :userId")
+  suspend fun getBlockerIds(userId: String): List<String>
+
+  @Query("SELECT blockedId FROM blocked_users WHERE blockerId = :userId UNION SELECT blockerId FROM blocked_users WHERE blockedId = :userId")
+  fun getAllBlockedEitherWayIdsFlow(userId: String): Flow<List<String>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertBlock(block: BlockedUserEntity)
+
+  @Query("DELETE FROM blocked_users WHERE blockerId = :blockerId AND blockedId = :blockedId")
+  suspend fun deleteBlock(blockerId: String, blockedId: String)
 }
 
