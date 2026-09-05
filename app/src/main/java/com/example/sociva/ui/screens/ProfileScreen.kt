@@ -596,7 +596,7 @@ fun ProfileScreen(
               Button(
                 onClick = { viewModel.navigateTo(SocivaScreen.EDIT_PROFILE) },
                 modifier = Modifier
-                  .fillMaxWidth()
+                  .weight(1f)
                   .testTag("edit_profile_button"),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = SocivaBlue)
@@ -604,6 +604,19 @@ fun ProfileScreen(
                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Edit Profile", fontWeight = FontWeight.Bold)
+              }
+
+              OutlinedButton(
+                onClick = { viewModel.navigateTo(SocivaScreen.ANALYTICS) },
+                modifier = Modifier
+                  .weight(1f)
+                  .testTag("profile_analytics_button"),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = SocivaIndigo)
+              ) {
+                Icon(Icons.Default.Insights, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Analytics", fontWeight = FontWeight.Bold)
               }
             }
           } else if (isUserBlocked) {
@@ -845,6 +858,10 @@ fun ProfileScreen(
             }
           } else {
             items(userPosts, key = { it.id }) { post ->
+              LaunchedEffect(post.id) {
+                viewModel.recordPostView(post.id)
+              }
+
               PostCard(
                 post = post,
                 currentUser = currentUser,
@@ -860,7 +877,8 @@ fun ProfileScreen(
                   viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
                 },
                 onRemoveTagClick = { viewModel.removePostTag(post.id) },
-                onReactionsClick = { viewModel.openReactionsModal(post.id) }
+                onReactionsClick = { viewModel.openReactionsModal(post.id) },
+                onAnalyticsClick = { viewModel.openPostAnalytics(post.id) }
               )
             }
           }
@@ -1154,6 +1172,10 @@ fun ProfileScreen(
             }
           } else {
             items(taggedPosts, key = { it.id }) { post ->
+              LaunchedEffect(post.id) {
+                viewModel.recordPostView(post.id)
+              }
+
               PostCard(
                 post = post,
                 currentUser = currentUser,
@@ -1167,7 +1189,8 @@ fun ProfileScreen(
                   viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
                 },
                 onRemoveTagClick = { viewModel.removePostTag(post.id) },
-                onReactionsClick = { viewModel.openReactionsModal(post.id) }
+                onReactionsClick = { viewModel.openReactionsModal(post.id) },
+                onAnalyticsClick = { viewModel.openPostAnalytics(post.id) }
               )
             }
           }

@@ -676,5 +676,132 @@ interface SocivaDao {
 
   @Query("DELETE FROM profile_views WHERE viewedUserId = :userId OR viewerUserId = :userId")
   suspend fun deleteProfileViewsForUser(userId: String)
+
+  // ==========================================
+  // Post Views & Analytics Queries
+  // ==========================================
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPostView(postView: PostViewEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPostViews(postViews: List<PostViewEntity>)
+
+  @Query("""
+    SELECT * FROM post_views 
+    WHERE postId = :postId 
+      AND viewerUserId = :viewerUserId 
+      AND viewedAt >= :thresholdTime 
+    ORDER BY viewedAt DESC 
+    LIMIT 1
+  """)
+  suspend fun getRecentPostView(postId: String, viewerUserId: String, thresholdTime: Long): PostViewEntity?
+
+  @Query("SELECT COUNT(*) FROM post_views WHERE postId = :postId")
+  fun getTotalViewsForPost(postId: String): Flow<Int>
+
+  @Query("SELECT COUNT(DISTINCT viewerUserId) FROM post_views WHERE postId = :postId")
+  fun getUniqueViewersForPost(postId: String): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM post_reactions WHERE post_id = :postId")
+  fun getReactionsCountForPost(postId: String): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM comments WHERE post_id = :postId")
+  fun getCommentsCountForPost(postId: String): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM comments WHERE post_id = :postId AND parent_comment_id IS NOT NULL")
+  fun getRepliesCountForPost(postId: String): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM posts WHERE originalPostId = :postId")
+  fun getSharesCountForPost(postId: String): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM posts WHERE id = :postId AND isSaved = 1")
+  fun getSavesCountForPost(postId: String): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM post_views WHERE postId = :postId AND generatedProfileVisit = 1")
+  fun getProfileVisitsFromPost(postId: String): Flow<Int>
+
+  @Query("SELECT reaction_type AS reactionType, COUNT(*) as count FROM post_reactions WHERE post_id = :postId GROUP BY reaction_type")
+  fun getReactionBreakdownForPost(postId: String): Flow<List<ReactionCountResult>>
+
+  @Query("""
+    SELECT u.* FROM users u 
+    INNER JOIN post_views pv ON u.id = pv.viewerUserId 
+    WHERE pv.postId = :postId 
+    GROUP BY u.id 
+    ORDER BY MAX(pv.viewedAt) DESC 
+    LIMIT :limit
+  """)
+  fun getRecentViewersForPost(postId: String, limit: Int = 10): Flow<List<UserEntity>>
+
+  @Query("SELECT * FROM post_views WHERE postId = :postId ORDER BY viewedAt ASC")
+  fun getAllViewsForPost(postId: String): Flow<List<PostViewEntity>>
+
+  // Profile Analytics Aggregations
+  @Query("""
+    SELECT COUNT(pv.id) FROM post_views pv 
+    INNER JOIN posts p ON pv.postId = p.id 
+    WHERE p.authorId = :userId 
+      AND (:sinceTimestamp <= 0 OR pv.viewedAt >= :sinceTimestamp)
+  """)
+  fun getTotalPostViewsForUser(userId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(pr.id) FROM post_reactions pr 
+    INNER JOIN posts p ON pr.post_id = p.id 
+    WHERE p.authorId = :userId 
+      AND (:sinceTimestamp <= 0 OR pr.created_at >= :sinceTimestamp)
+  """)
+  fun getTotalReactionsForUser(userId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(c.id) FROM comments c 
+    INNER JOIN posts p ON c.post_id = p.id 
+    WHERE p.authorId = :userId 
+      AND (:sinceTimestamp <= 0 OR c.created_at >= :sinceTimestamp)
+  """)
+  fun getTotalCommentsForUser(userId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(*) FROM posts 
+    WHERE originalPostId IN (SELECT id FROM posts WHERE authorId = :userId)
+      AND (:sinceTimestamp <= 0 OR timestamp >= :sinceTimestamp)
+  """)
+  fun getTotalSharesForUser(userId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(*) FROM posts 
+    WHERE authorId = :userId AND isSaved = 1
+  """)
+  fun getTotalSavesForUser(userId: String): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(*) FROM follows 
+    WHERE followingId = :userId 
+      AND (:sinceTimestamp <= 0 OR createdAt >= :sinceTimestamp)
+  """)
+  fun getFollowersGainedForUser(userId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT * FROM posts 
+    WHERE authorId = :userId 
+    ORDER BY (likesCount + commentsCount * 2 + sharesCount * 3) DESC 
+    LIMIT :limit
+  """)
+  fun getBestPerformingPostsForUser(userId: String, limit: Int = 5): Flow<List<PostEntity>>
+
+  @Query("""
+    SELECT pv.* FROM post_views pv 
+    INNER JOIN posts p ON pv.postId = p.id 
+    WHERE p.authorId = :userId 
+      AND pv.viewedAt >= :sinceTimestamp 
+    ORDER BY pv.viewedAt ASC
+  """)
+  fun getPostViewsForUserSince(userId: String, sinceTimestamp: Long): Flow<List<PostViewEntity>>
 }
+
+data class ReactionCountResult(
+  val reactionType: String,
+  val count: Int
+)
 

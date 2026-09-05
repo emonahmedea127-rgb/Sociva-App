@@ -39,6 +39,10 @@ class SocivaRepository(
         if (existingViews == 0) {
           dao.insertProfileViews(SeedData.profileViews)
         }
+        val existingPostViews = dao.getTotalViewsForPost("post_2").first()
+        if (existingPostViews == 0) {
+          dao.insertPostViews(SeedData.postViews)
+        }
       }
       // Ensure current user settings are seeded if missing
       val existingSettings = dao.getUserSettingsSync("user_me")
@@ -80,6 +84,7 @@ class SocivaRepository(
     dao.insertGroups(SeedData.groups)
     dao.insertReports(SeedData.reports)
     dao.insertProfileViews(SeedData.profileViews)
+    dao.insertPostViews(SeedData.postViews)
     dao.insertOrUpdateUserSettings(
       UserSettingsEntity(
         userId = "user_me",
@@ -1952,11 +1957,24 @@ class SocivaRepository(
 
   // --- Profile Views ---
 
-  suspend fun recordProfileVisit(viewerUserId: String = "user_me", viewedUserId: String) {
+  suspend fun recordProfileVisit(
+    viewerUserId: String = "user_me",
+    viewedUserId: String,
+    originatingPostId: String? = null
+  ) {
     try {
       if (viewerUserId.isBlank() || viewedUserId.isBlank()) return
       // Requirement 3: Do not track self-views
       if (viewerUserId == viewedUserId || (viewerUserId == "user_me" && viewedUserId == "user_me")) return
+
+      // If this visit came from clicking a post author, mark the post view as having generated a profile visit
+      if (!originatingPostId.isNullOrBlank()) {
+        val tenMinutesAgo = System.currentTimeMillis() - (10 * 60 * 1000L)
+        val postView = dao.getRecentPostView(originatingPostId, viewerUserId, tenMinutesAgo)
+        if (postView != null && !postView.generatedProfileVisit) {
+          dao.insertPostView(postView.copy(generatedProfileVisit = true))
+        }
+      }
 
       // Requirement 10: Check if blocked either way
       if (dao.isBlockedEitherWay(viewerUserId, viewedUserId)) return
@@ -2095,6 +2113,245 @@ class SocivaRepository(
 
   suspend fun updateProfileViewHistorySetting(userId: String = "user_me", enabled: Boolean) {
     dao.updateProfileViewHistoryEnabled(userId, enabled)
+  }
+
+  // ==========================================
+  // Post Views & Real Analytics Methods
+  // ==========================================
+
+  suspend fun recordPostView(
+    postId: String,
+    viewerUserId: String,
+    isProfileVisitTarget: Boolean = false
+  ) {
+    // Validation: cannot record view without viewer or post
+    if (postId.isBlank() || viewerUserId.isBlank()) return
+
+    // Don't count the post owner's own views
+    val post = dao.findPostById(postId) ?: return
+    if (post.authorId == viewerUserId) return
+
+    // Deduplication window: 10 minutes (600,000 ms)
+    val tenMinutesAgo = System.currentTimeMillis() - (10 * 60 * 1000L)
+    val recentView = dao.getRecentPostView(postId, viewerUserId, tenMinutesAgo)
+
+    if (recentView != null) {
+      // If the viewer subsequently visited the author's profile from this post within the window, update flag
+      if (isProfileVisitTarget && !recentView.generatedProfileVisit) {
+        dao.insertPostView(recentView.copy(generatedProfileVisit = true))
+      }
+      return
+    }
+
+    // Insert new valid view
+    val viewEntity = PostViewEntity(
+      id = "pv_${UUID.randomUUID().toString().take(12)}",
+      postId = postId,
+      viewerUserId = viewerUserId,
+      viewedAt = System.currentTimeMillis(),
+      createdAt = System.currentTimeMillis(),
+      generatedProfileVisit = isProfileVisitTarget
+    )
+    dao.insertPostView(viewEntity)
+  }
+
+  fun getPostAnalyticsFlow(
+    postId: String,
+    requestingUserId: String
+  ): Flow<PostAnalytics?> {
+    return combine(
+      dao.getPostById(postId),
+      dao.getTotalViewsForPost(postId),
+      dao.getUniqueViewersForPost(postId),
+      dao.getReactionsCountForPost(postId),
+      dao.getCommentsCountForPost(postId),
+      dao.getRepliesCountForPost(postId),
+      dao.getSharesCountForPost(postId),
+      dao.getSavesCountForPost(postId),
+      dao.getProfileVisitsFromPost(postId),
+      dao.getReactionBreakdownForPost(postId),
+      dao.getRecentViewersForPost(postId, 15),
+      dao.getAllViewsForPost(postId)
+    ) { results ->
+      val post = results[0] as? PostEntity ?: return@combine null
+
+      // Privacy / Authorization rule: Only author can see analytics
+      if (post.authorId != requestingUserId) {
+        return@combine null
+      }
+
+      val totalViews = (results[1] as? Int) ?: 0
+      val uniqueViewers = (results[2] as? Int) ?: 0
+      val reactionsCount = (results[3] as? Int) ?: 0
+      val commentsCount = (results[4] as? Int) ?: 0
+      val repliesCount = (results[5] as? Int) ?: 0
+      val sharesCount = (results[6] as? Int) ?: 0
+      val savesCount = (results[7] as? Int) ?: 0
+      val profileVisits = (results[8] as? Int) ?: 0
+      @Suppress("UNCHECKED_CAST")
+      val reactionBreakdownRaw = (results[9] as? List<ReactionCountResult>) ?: emptyList()
+      @Suppress("UNCHECKED_CAST")
+      val recentViewerEntities = (results[10] as? List<UserEntity>) ?: emptyList()
+      @Suppress("UNCHECKED_CAST")
+      val allViews = (results[11] as? List<PostViewEntity>) ?: emptyList()
+
+      // Engagement rate calculation: (Reactions + Comments + Shares + Saves) / Views * 100
+      val totalInteractions = reactionsCount + commentsCount + sharesCount + savesCount
+      val engagementRate = if (totalViews > 0) {
+        (totalInteractions.toDouble() / totalViews.toDouble()) * 100.0
+      } else if (totalInteractions > 0) {
+        100.0
+      } else {
+        0.0
+      }
+
+      // Group views by hour or day for mini sparkline/chart
+      val viewsOverTime = computeViewsDistribution(allViews)
+
+      PostAnalytics(
+        postId = postId,
+        totalViews = totalViews,
+        uniqueViewers = uniqueViewers,
+        reactionsCount = reactionsCount,
+        commentsCount = commentsCount,
+        repliesCount = repliesCount,
+        sharesCount = sharesCount,
+        savesCount = savesCount,
+        profileVisitsFromPost = profileVisits,
+        engagementRate = engagementRate,
+        reactionBreakdown = reactionBreakdownRaw.associate { it.reactionType to it.count },
+        recentViewers = recentViewerEntities.map { it.toDomain() },
+        viewsOverTime = viewsOverTime
+      )
+    }
+  }
+
+  fun getProfileAnalyticsFlow(
+    targetUserId: String,
+    requestingUserId: String,
+    timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.LAST_7_DAYS
+  ): Flow<ProfileAnalytics?> {
+    // Privacy check: Only owner of profile can see their analytics
+    if (targetUserId != requestingUserId) {
+      return flowOf(null)
+    }
+
+    val now = System.currentTimeMillis()
+    val sinceTimestamp: Long = when (timeWindow) {
+      AnalyticsTimeWindow.LAST_7_DAYS -> now - (7L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.LAST_30_DAYS -> now - (30L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.ALL_TIME -> 0L
+    }
+
+    return combine(
+      dao.getTotalPostViewsForUser(targetUserId, sinceTimestamp),
+      dao.getTotalReactionsForUser(targetUserId, sinceTimestamp),
+      dao.getTotalCommentsForUser(targetUserId, sinceTimestamp),
+      dao.getTotalSharesForUser(targetUserId, sinceTimestamp),
+      dao.getTotalSavesForUser(targetUserId),
+      dao.getProfileViewsCountSince(targetUserId, sinceTimestamp),
+      dao.getFollowersGainedForUser(targetUserId, sinceTimestamp),
+      dao.getBestPerformingPostsForUser(targetUserId, 5),
+      dao.getPostViewsForUserSince(targetUserId, sinceTimestamp)
+    ) { results ->
+      val totalPostViews = (results[0] as? Int) ?: 0
+      val totalReactions = (results[1] as? Int) ?: 0
+      val totalComments = (results[2] as? Int) ?: 0
+      val totalShares = (results[3] as? Int) ?: 0
+      val totalSaves = (results[4] as? Int) ?: 0
+      val profileVisits = (results[5] as? Int) ?: 0
+      val followersGained = (results[6] as? Int) ?: 0
+      @Suppress("UNCHECKED_CAST")
+      val bestPostsEntities = (results[7] as? List<PostEntity>) ?: emptyList()
+      @Suppress("UNCHECKED_CAST")
+      val postViewsList = (results[8] as? List<PostViewEntity>) ?: emptyList()
+
+      val totalInteractions = totalReactions + totalComments + totalShares + totalSaves
+      val engagementRate = if (totalPostViews > 0) {
+        (totalInteractions.toDouble() / totalPostViews.toDouble()) * 100.0
+      } else if (totalInteractions > 0) {
+        100.0
+      } else {
+        0.0
+      }
+
+      val dailyTrend = computeDailyTrend(postViewsList, timeWindow)
+
+      ProfileAnalytics(
+        userId = targetUserId,
+        timeWindow = timeWindow,
+        totalPostViews = totalPostViews,
+        totalReactions = totalReactions,
+        totalComments = totalComments,
+        totalShares = totalShares,
+        totalSaves = totalSaves,
+        profileVisits = profileVisits,
+        followersGained = followersGained,
+        engagementRate = engagementRate,
+        bestPerformingPosts = bestPostsEntities.map { it.toDomain() },
+        dailyViewsTrend = dailyTrend
+      )
+    }
+  }
+
+  private fun computeViewsDistribution(views: List<PostViewEntity>): List<Pair<String, Int>> {
+    if (views.isEmpty()) {
+      return listOf("Day 1" to 0, "Day 2" to 0, "Day 3" to 0, "Day 4" to 0, "Day 5" to 0, "Day 6" to 0, "Day 7" to 0)
+    }
+    val cal = Calendar.getInstance()
+    val map = mutableMapOf<String, Int>()
+    // Generate buckets for the last 7 days
+    for (i in 6 downTo 0) {
+      cal.timeInMillis = System.currentTimeMillis() - (i * 24 * 60 * 60 * 1000L)
+      val dayStr = when (cal.get(Calendar.DAY_OF_WEEK)) {
+        Calendar.SUNDAY -> "Sun"
+        Calendar.MONDAY -> "Mon"
+        Calendar.TUESDAY -> "Tue"
+        Calendar.WEDNESDAY -> "Wed"
+        Calendar.THURSDAY -> "Thu"
+        Calendar.FRIDAY -> "Fri"
+        else -> "Sat"
+      }
+      map[dayStr] = 0
+    }
+
+    views.forEach { v ->
+      cal.timeInMillis = v.viewedAt
+      val dayStr = when (cal.get(Calendar.DAY_OF_WEEK)) {
+        Calendar.SUNDAY -> "Sun"
+        Calendar.MONDAY -> "Mon"
+        Calendar.TUESDAY -> "Tue"
+        Calendar.WEDNESDAY -> "Wed"
+        Calendar.THURSDAY -> "Thu"
+        Calendar.FRIDAY -> "Fri"
+        else -> "Sat"
+      }
+      map[dayStr] = (map[dayStr] ?: 0) + 1
+    }
+    return map.toList()
+  }
+
+  private fun computeDailyTrend(views: List<PostViewEntity>, timeWindow: AnalyticsTimeWindow): List<Pair<String, Int>> {
+    val cal = Calendar.getInstance()
+    val numDays = when (timeWindow) {
+      AnalyticsTimeWindow.LAST_7_DAYS -> 7
+      AnalyticsTimeWindow.LAST_30_DAYS -> 14 // 14 sample points for 30 days
+      AnalyticsTimeWindow.ALL_TIME -> 7
+    }
+
+    val list = mutableListOf<Pair<String, Int>>()
+    val now = System.currentTimeMillis()
+    val stepMillis = if (numDays == 7) 24 * 60 * 60 * 1000L else 2 * 24 * 60 * 60 * 1000L
+
+    for (i in (numDays - 1) downTo 0) {
+      val bucketStart = now - ((i + 1) * stepMillis)
+      val bucketEnd = now - (i * stepMillis)
+      cal.timeInMillis = bucketEnd
+      val label = "${cal.get(Calendar.MONTH) + 1}/${cal.get(Calendar.DAY_OF_MONTH)}"
+      val count = views.count { it.viewedAt in (bucketStart + 1)..bucketEnd }
+      list.add(label to count)
+    }
+    return list
   }
 }
 

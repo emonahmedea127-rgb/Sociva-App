@@ -82,6 +82,12 @@ fun MenuScreen(
       onClick = { viewModel.selectTab(1) }
     ),
     MenuItem(
+      title = "Professional Analytics",
+      icon = Icons.Default.Insights,
+      iconColor = Color(0xFF6366F1),
+      onClick = { viewModel.navigateTo(SocivaScreen.ANALYTICS) }
+    ),
+    MenuItem(
       title = "Admin Portal",
       icon = Icons.Default.AdminPanelSettings,
       iconColor = Color(0xFFEF4444),

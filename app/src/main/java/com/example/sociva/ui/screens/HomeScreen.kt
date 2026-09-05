@@ -134,6 +134,10 @@ fun HomeScreen(
 
     // 3. Feed Posts
     items(visiblePosts, key = { it.id }) { post ->
+      LaunchedEffect(post.id) {
+        viewModel.recordPostView(post.id)
+      }
+
       PostCard(
         post = post,
         currentUser = currentUser,
@@ -141,15 +145,22 @@ fun HomeScreen(
         onCommentClick = { viewModel.openComments(post.id) },
         onShareClick = { viewModel.openShareComposer(post) },
         onSaveClick = { viewModel.toggleSavePost(post.id) },
-        onAuthorClick = { viewModel.navigateToProfile(post.authorId) },
-        onSharedAuthorClick = { origAuthorId -> viewModel.navigateToProfile(origAuthorId) },
+        onAuthorClick = {
+          viewModel.recordProfileVisit(post.authorId, originatingPostId = post.id)
+          viewModel.navigateToProfile(post.authorId)
+        },
+        onSharedAuthorClick = { origAuthorId ->
+          viewModel.recordProfileVisit(origAuthorId, originatingPostId = post.id)
+          viewModel.navigateToProfile(origAuthorId)
+        },
         onDeleteClick = { viewModel.deletePost(post.id) },
         onEditClick = { viewModel.openEditPost(post) },
         onReportClick = {
           viewModel.submitReport("Post", post.id, post.content.take(40), "Inappropriate or spam content")
         },
         onRemoveTagClick = { viewModel.removePostTag(post.id) },
-        onReactionsClick = { viewModel.openReactionsModal(post.id) }
+        onReactionsClick = { viewModel.openReactionsModal(post.id) },
+        onAnalyticsClick = { viewModel.openPostAnalytics(post.id) }
       )
     }
   }
@@ -494,7 +505,8 @@ fun PostCard(
   onEditClick: (() -> Unit)? = null,
   onSharedAuthorClick: ((String) -> Unit)? = null,
   onRemoveTagClick: (() -> Unit)? = null,
-  onReactionsClick: (() -> Unit)? = null
+  onReactionsClick: (() -> Unit)? = null,
+  onAnalyticsClick: (() -> Unit)? = null
 ) {
   var showMenu by remember { mutableStateOf(false) }
   var showReactionPicker by remember { mutableStateOf(false) }
@@ -638,6 +650,23 @@ fun PostCard(
               )
             }
             if (post.authorId == currentUser?.id) {
+              if (onAnalyticsClick != null) {
+                DropdownMenuItem(
+                  text = { Text("View Analytics") },
+                  leadingIcon = {
+                    Icon(
+                      Icons.Outlined.Insights,
+                      contentDescription = null,
+                      tint = SocivaBlue
+                    )
+                  },
+                  onClick = {
+                    showMenu = false
+                    onAnalyticsClick()
+                  },
+                  modifier = Modifier.testTag("post_view_analytics_${post.id}")
+                )
+              }
               if (onEditClick != null) {
                 DropdownMenuItem(
                   text = { Text(if (post.postType == PostType.SHARED_POST) "Edit Caption" else "Edit Post") },
@@ -806,7 +835,34 @@ fun PostCard(
           Spacer(modifier = Modifier.width(1.dp))
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          if (post.authorId == currentUser?.id && onAnalyticsClick != null) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(3.dp),
+              modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { onAnalyticsClick() }
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .testTag("post_quick_analytics_btn_${post.id}")
+            ) {
+              Icon(
+                Icons.Outlined.BarChart,
+                contentDescription = "View Analytics",
+                tint = SocivaBlue,
+                modifier = Modifier.size(13.dp)
+              )
+              Text(
+                text = "Analytics",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = SocivaBlue
+              )
+            }
+          }
           if (post.commentsCount > 0) {
             Text(
               text = "${post.commentsCount} comments",

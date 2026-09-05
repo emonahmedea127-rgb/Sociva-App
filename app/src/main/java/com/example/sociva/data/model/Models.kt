@@ -448,3 +448,40 @@ data class RelationshipContext(
   val incomingReqMap: Map<String, com.example.sociva.data.local.FriendRequestEntity>,
   val followingIds: Set<String>
 )
+
+enum class AnalyticsTimeWindow(val label: String) {
+  LAST_7_DAYS("7 Days"),
+  LAST_30_DAYS("30 Days"),
+  ALL_TIME("All Time")
+}
+
+data class PostAnalytics(
+  val postId: String,
+  val totalViews: Int = 0,
+  val uniqueViewers: Int = 0,
+  val reactionsCount: Int = 0,
+  val commentsCount: Int = 0,
+  val repliesCount: Int = 0,
+  val sharesCount: Int = 0,
+  val savesCount: Int = 0,
+  val profileVisitsFromPost: Int = 0,
+  val engagementRate: Double = 0.0,
+  val reactionBreakdown: Map<String, Int> = emptyMap(),
+  val recentViewers: List<User> = emptyList(),
+  val viewsOverTime: List<Pair<String, Int>> = emptyList()
+)
+
+data class ProfileAnalytics(
+  val userId: String,
+  val timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.LAST_7_DAYS,
+  val totalPostViews: Int = 0,
+  val totalReactions: Int = 0,
+  val totalComments: Int = 0,
+  val totalShares: Int = 0,
+  val totalSaves: Int = 0,
+  val profileVisits: Int = 0,
+  val followersGained: Int = 0,
+  val engagementRate: Double = 0.0,
+  val bestPerformingPosts: List<Post> = emptyList(),
+  val dailyViewsTrend: List<Pair<String, Int>> = emptyList()
+)

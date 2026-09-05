@@ -74,6 +74,10 @@ fun SavedPostsScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
       ) {
         items(savedPosts, key = { it.id }) { post ->
+          LaunchedEffect(post.id) {
+            viewModel.recordPostView(post.id)
+          }
+
           PostCard(
             post = post,
             currentUser = currentUser,
@@ -86,7 +90,8 @@ fun SavedPostsScreen(
             onReportClick = {
               viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
             },
-            onReactionsClick = { viewModel.openReactionsModal(post.id) }
+            onReactionsClick = { viewModel.openReactionsModal(post.id) },
+            onAnalyticsClick = { viewModel.openPostAnalytics(post.id) }
           )
         }
       }

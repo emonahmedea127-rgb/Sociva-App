@@ -30,7 +30,8 @@ enum class SocivaScreen {
   GROUPS,
   SETTINGS,
   ADMIN,
-  SAVED_POSTS
+  SAVED_POSTS,
+  ANALYTICS
 }
 
 data class StoryMediaSelection(
@@ -79,6 +80,10 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
 
   private val _reactionsModalPostId = MutableStateFlow<String?>(null)
   val reactionsModalPostId: StateFlow<String?> = _reactionsModalPostId.asStateFlow()
+
+  // Post Analytics Modal State
+  private val _analyticsPostId = MutableStateFlow<String?>(null)
+  val analyticsPostId: StateFlow<String?> = _analyticsPostId.asStateFlow()
 
   // Share Post Composer State
   private val _sharingPost = MutableStateFlow<Post?>(null)
@@ -139,10 +144,32 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   fun getProfileVisitorsFlow(limit: Int = 50): Flow<List<ProfileVisitorItem>> =
     repository.getProfileVisitorsFlow(_currentUserId.value, limit)
 
-  fun recordProfileVisit(targetUserId: String) {
+  fun recordProfileVisit(targetUserId: String, originatingPostId: String? = null) {
     viewModelScope.launch {
-      repository.recordProfileVisit(_currentUserId.value, targetUserId)
+      repository.recordProfileVisit(_currentUserId.value, targetUserId, originatingPostId)
     }
+  }
+
+  fun recordPostView(postId: String) {
+    viewModelScope.launch {
+      repository.recordPostView(postId, _currentUserId.value)
+    }
+  }
+
+  fun getPostAnalytics(postId: String): Flow<PostAnalytics?> {
+    return repository.getPostAnalyticsFlow(postId, _currentUserId.value)
+  }
+
+  fun getProfileAnalytics(timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.LAST_7_DAYS): Flow<ProfileAnalytics?> {
+    return repository.getProfileAnalyticsFlow(_currentUserId.value, _currentUserId.value, timeWindow)
+  }
+
+  fun openPostAnalytics(postId: String) {
+    _analyticsPostId.value = postId
+  }
+
+  fun closePostAnalytics() {
+    _analyticsPostId.value = null
   }
 
   fun markProfileVisitorsSeen() {

@@ -38,6 +38,7 @@ fun SocivaApp(
   val isLoggedIn by viewModel.isLoggedIn.collectAsState()
   val commentsPostId by viewModel.commentsPostId.collectAsState()
   val reactionsModalPostId by viewModel.reactionsModalPostId.collectAsState()
+  val analyticsPostId by viewModel.analyticsPostId.collectAsState()
   val sharingPost by viewModel.sharingPost.collectAsState()
   val editingPost by viewModel.editingPost.collectAsState()
   val currentUser by viewModel.currentUser.collectAsState()
@@ -180,6 +181,13 @@ fun SocivaApp(
       SavedPostsScreen(
         viewModel = viewModel,
         onBack = { viewModel.navigateTo(SocivaScreen.MAIN) }
+      )
+      return
+    }
+    SocivaScreen.ANALYTICS -> {
+      ProfileAnalyticsScreen(
+        viewModel = viewModel,
+        onBack = { viewModel.navigateTo(SocivaScreen.PROFILE) }
       )
       return
     }
@@ -335,6 +343,15 @@ fun SocivaApp(
       postId = reactionsModalPostId!!,
       viewModel = viewModel,
       onDismiss = { viewModel.closeReactionsModal() }
+    )
+  }
+
+  // Post Analytics Bottom Sheet
+  if (analyticsPostId != null) {
+    PostAnalyticsBottomSheet(
+      postId = analyticsPostId!!,
+      viewModel = viewModel,
+      onDismiss = { viewModel.closePostAnalytics() }
     )
   }
 

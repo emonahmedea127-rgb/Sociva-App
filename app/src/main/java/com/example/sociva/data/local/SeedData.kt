@@ -1054,6 +1054,31 @@ object SeedData {
       isAnonymous = false
     )
   )
+
+  val postViews = listOf(
+    // Views for post_2 (authored by user_me)
+    PostViewEntity(id = "pv_post2_1", postId = "post_2", viewerUserId = "user_sarah", viewedAt = now - (1000 * 60 * 85), createdAt = now - (1000 * 60 * 85), generatedProfileVisit = true),
+    PostViewEntity(id = "pv_post2_2", postId = "post_2", viewerUserId = "user_marcus", viewedAt = now - (1000 * 60 * 75), createdAt = now - (1000 * 60 * 75), generatedProfileVisit = false),
+    PostViewEntity(id = "pv_post2_3", postId = "post_2", viewerUserId = "user_maya", viewedAt = now - (1000 * 60 * 65), createdAt = now - (1000 * 60 * 65), generatedProfileVisit = true),
+    PostViewEntity(id = "pv_post2_4", postId = "post_2", viewerUserId = "user_david", viewedAt = now - (1000 * 60 * 55), createdAt = now - (1000 * 60 * 55), generatedProfileVisit = false),
+    PostViewEntity(id = "pv_post2_5", postId = "post_2", viewerUserId = "user_elena", viewedAt = now - (1000 * 60 * 45), createdAt = now - (1000 * 60 * 45), generatedProfileVisit = true),
+    PostViewEntity(id = "pv_post2_6", postId = "post_2", viewerUserId = "user_jessica", viewedAt = now - (1000 * 60 * 35), createdAt = now - (1000 * 60 * 35), generatedProfileVisit = false),
+    PostViewEntity(id = "pv_post2_7", postId = "post_2", viewerUserId = "user_michael", viewedAt = now - (1000 * 60 * 25), createdAt = now - (1000 * 60 * 25), generatedProfileVisit = true),
+    PostViewEntity(id = "pv_post2_8", postId = "post_2", viewerUserId = "user_emily", viewedAt = now - (1000 * 60 * 15), createdAt = now - (1000 * 60 * 15), generatedProfileVisit = false),
+    PostViewEntity(id = "pv_post2_9", postId = "post_2", viewerUserId = "user_sarah", viewedAt = now - (1000 * 60 * 10), createdAt = now - (1000 * 60 * 10), generatedProfileVisit = false),
+
+    // Views for post_1 (authored by user_sarah)
+    PostViewEntity(id = "pv_post1_1", postId = "post_1", viewerUserId = "user_me", viewedAt = now - (1000 * 60 * 20), createdAt = now - (1000 * 60 * 20), generatedProfileVisit = true),
+    PostViewEntity(id = "pv_post1_2", postId = "post_1", viewerUserId = "user_marcus", viewedAt = now - (1000 * 60 * 18), createdAt = now - (1000 * 60 * 18), generatedProfileVisit = false),
+    PostViewEntity(id = "pv_post1_3", postId = "post_1", viewerUserId = "user_maya", viewedAt = now - (1000 * 60 * 15), createdAt = now - (1000 * 60 * 15), generatedProfileVisit = false),
+    PostViewEntity(id = "pv_post1_4", postId = "post_1", viewerUserId = "user_david", viewedAt = now - (1000 * 60 * 12), createdAt = now - (1000 * 60 * 12), generatedProfileVisit = true),
+    PostViewEntity(id = "pv_post1_5", postId = "post_1", viewerUserId = "user_elena", viewedAt = now - (1000 * 60 * 10), createdAt = now - (1000 * 60 * 10), generatedProfileVisit = false),
+
+    // Views for post_3 (authored by user_marcus)
+    PostViewEntity(id = "pv_post3_1", postId = "post_3", viewerUserId = "user_me", viewedAt = now - (1000 * 60 * 150), createdAt = now - (1000 * 60 * 150), generatedProfileVisit = false),
+    PostViewEntity(id = "pv_post3_2", postId = "post_3", viewerUserId = "user_sarah", viewedAt = now - (1000 * 60 * 140), createdAt = now - (1000 * 60 * 140), generatedProfileVisit = true),
+    PostViewEntity(id = "pv_post3_3", postId = "post_3", viewerUserId = "user_maya", viewedAt = now - (1000 * 60 * 130), createdAt = now - (1000 * 60 * 130), generatedProfileVisit = false)
+  )
 }
 
 // Type alias helper for Page entity mapping

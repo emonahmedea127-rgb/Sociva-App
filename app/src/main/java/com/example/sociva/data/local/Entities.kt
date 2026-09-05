@@ -477,4 +477,22 @@ data class ProfileViewEntity(
   val isAnonymous: Boolean = false
 )
 
+@Entity(
+  tableName = "post_views",
+  indices = [
+    Index(value = ["postId"]),
+    Index(value = ["viewerUserId"]),
+    Index(value = ["viewedAt"]),
+    Index(value = ["postId", "viewerUserId", "viewedAt"])
+  ]
+)
+data class PostViewEntity(
+  @PrimaryKey val id: String,
+  val postId: String,
+  val viewerUserId: String,
+  val viewedAt: Long = System.currentTimeMillis(),
+  val createdAt: Long = System.currentTimeMillis(),
+  val generatedProfileVisit: Boolean = false
+)
+
 
