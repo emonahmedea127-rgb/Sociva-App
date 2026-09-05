@@ -78,6 +78,9 @@ interface SocivaDao {
   @Query("SELECT * FROM posts WHERE id = :postId LIMIT 1")
   fun getPostById(postId: String): Flow<PostEntity?>
 
+  @Query("SELECT * FROM posts WHERE id = :postId LIMIT 1")
+  suspend fun findPostById(postId: String): PostEntity?
+
   @Query("SELECT * FROM posts WHERE authorId = :userId ORDER BY timestamp DESC")
   fun getPostsByAuthor(userId: String): Flow<List<PostEntity>>
 
@@ -96,6 +99,18 @@ interface SocivaDao {
   @Query("DELETE FROM posts WHERE id = :postId")
   suspend fun deletePostById(postId: String)
 
+  @Query("SELECT * FROM posts WHERE id IN (:postIds)")
+  suspend fun findPostsByIds(postIds: List<String>): List<PostEntity>
+
+  @Query("UPDATE posts SET sharesCount = sharesCount + 1 WHERE id = :postId")
+  suspend fun incrementSharesCount(postId: String)
+
+  @Query("UPDATE posts SET sharesCount = CASE WHEN sharesCount > 0 THEN sharesCount - 1 ELSE 0 END WHERE id = :postId")
+  suspend fun decrementSharesCount(postId: String)
+
+  @Query("UPDATE posts SET content = :newContent WHERE id = :postId")
+  suspend fun updatePostContent(postId: String, newContent: String)
+
   // Comments
   @Query("SELECT * FROM comments WHERE post_id = :postId ORDER BY created_at ASC")
   fun getCommentsForPost(postId: String): Flow<List<CommentEntity>>
@@ -105,9 +120,6 @@ interface SocivaDao {
 
   @Query("SELECT * FROM comments WHERE id = :commentId LIMIT 1")
   suspend fun findCommentById(commentId: String): CommentEntity?
-
-  @Query("SELECT * FROM posts WHERE id = :postId LIMIT 1")
-  suspend fun findPostById(postId: String): PostEntity?
 
   @Query("SELECT * FROM comments WHERE parent_comment_id = :parentCommentId ORDER BY created_at ASC")
   fun getRepliesForComment(parentCommentId: String): Flow<List<CommentEntity>>

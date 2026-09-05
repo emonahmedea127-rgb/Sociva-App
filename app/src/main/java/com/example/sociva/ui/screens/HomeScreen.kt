@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +57,7 @@ fun HomeScreen(
   val visiblePosts = remember(posts, currentUser, friendIds, blockedUserIds) {
     posts.filter { post ->
       if (post.authorId in blockedUserIds) return@filter false
+      if (post.postType == PostType.SHARED_POST && post.sharedPost?.authorId in blockedUserIds) return@filter false
       val isMyPost = post.authorId == currentUser?.id
       if (isMyPost) return@filter true
       when (post.audience) {
@@ -136,10 +139,12 @@ fun HomeScreen(
         currentUser = currentUser,
         onReaction = { reaction -> viewModel.setReaction(post.id, reaction) },
         onCommentClick = { viewModel.openComments(post.id) },
-        onShareClick = { viewModel.sharePost(post.id) },
+        onShareClick = { viewModel.openShareComposer(post) },
         onSaveClick = { viewModel.toggleSavePost(post.id) },
         onAuthorClick = { viewModel.navigateToProfile(post.authorId) },
+        onSharedAuthorClick = { origAuthorId -> viewModel.navigateToProfile(origAuthorId) },
         onDeleteClick = { viewModel.deletePost(post.id) },
+        onEditClick = { viewModel.openEditPost(post) },
         onReportClick = {
           viewModel.submitReport("Post", post.id, post.content.take(40), "Inappropriate or spam content")
         },
@@ -486,6 +491,8 @@ fun PostCard(
   onAuthorClick: () -> Unit,
   onDeleteClick: () -> Unit,
   onReportClick: () -> Unit,
+  onEditClick: (() -> Unit)? = null,
+  onSharedAuthorClick: ((String) -> Unit)? = null,
   onRemoveTagClick: (() -> Unit)? = null,
   onReactionsClick: (() -> Unit)? = null
 ) {
@@ -519,7 +526,10 @@ fun PostCard(
         Spacer(modifier = Modifier.width(10.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+          ) {
             Text(
               text = post.authorName,
               style = MaterialTheme.typography.titleSmall,
@@ -530,6 +540,14 @@ fun PostCard(
             if (post.isAuthorVerified) {
               Spacer(modifier = Modifier.width(4.dp))
               VerifiedBadge(size = 14.dp)
+            }
+            if (!post.actionContextText.isNullOrBlank()) {
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = post.actionContextText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
             }
             if (post.taggedUsers.isNotEmpty()) {
               Text(
@@ -620,6 +638,21 @@ fun PostCard(
               )
             }
             if (post.authorId == currentUser?.id) {
+              if (onEditClick != null) {
+                DropdownMenuItem(
+                  text = { Text(if (post.postType == PostType.SHARED_POST) "Edit Caption" else "Edit Post") },
+                  leadingIcon = {
+                    Icon(
+                      Icons.Outlined.Edit,
+                      contentDescription = null
+                    )
+                  },
+                  onClick = {
+                    showMenu = false
+                    onEditClick()
+                  }
+                )
+              }
               DropdownMenuItem(
                 text = { Text("Delete Post", color = MaterialTheme.colorScheme.error) },
                 leadingIcon = {
@@ -664,9 +697,65 @@ fun PostCard(
         )
       }
 
-      // Post Media (Single image or multi-image grid)
+      // Post Media (Single image, multi-image grid, or special update layout)
       if (post.mediaUrls.isNotEmpty()) {
-        PostMediaGallery(mediaUrls = post.mediaUrls)
+        if (post.postType == PostType.PROFILE_PICTURE_UPDATE) {
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+              .padding(vertical = 24.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            Box(
+              modifier = Modifier
+                .size(240.dp)
+                .clip(CircleShape)
+                .border(4.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                .border(5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), CircleShape)
+            ) {
+              AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                  .data(post.mediaUrls.first())
+                  .crossfade(true)
+                  .build(),
+                contentDescription = "Updated profile picture",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+              )
+            }
+          }
+        } else if (post.postType == PostType.COVER_PHOTO_UPDATE) {
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .aspectRatio(16f / 9f)
+          ) {
+            AsyncImage(
+              model = ImageRequest.Builder(LocalContext.current)
+                .data(post.mediaUrls.first())
+                .crossfade(true)
+                .build(),
+              contentDescription = "Updated cover photo",
+              contentScale = ContentScale.Crop,
+              modifier = Modifier.fillMaxSize()
+            )
+          }
+        } else {
+          PostMediaGallery(mediaUrls = post.mediaUrls)
+        }
+      }
+
+      // Shared Post Nested Card Preview
+      if (post.postType == PostType.SHARED_POST && post.sharedPost != null) {
+        SharedPostCard(
+          sharedPost = post.sharedPost,
+          onAuthorClick = {
+            if (post.sharedPost.authorId.isNotBlank()) {
+              onSharedAuthorClick?.invoke(post.sharedPost.authorId)
+            }
+          }
+        )
       }
 
       // Stats Bar: Reactions, Comments, Shares
@@ -955,6 +1044,196 @@ fun PostMediaGallery(mediaUrls: List<String>) {
               .weight(1f)
               .fillMaxHeight()
           )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+fun SharedPostCard(
+  sharedPost: SharedPostPreview,
+  onAuthorClick: (() -> Unit)? = null
+) {
+  if (sharedPost.isUnavailable) {
+    Card(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 14.dp, vertical = 6.dp)
+        .testTag("shared_post_unavailable_card"),
+      shape = RoundedCornerShape(12.dp),
+      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    ) {
+      Column(
+        modifier = Modifier.padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        Icon(
+          imageVector = Icons.Outlined.Lock,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(32.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          text = "This content isn't available right now",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+          text = sharedPost.content,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = TextAlign.Center
+        )
+      }
+    }
+  } else {
+    Card(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 14.dp, vertical = 6.dp)
+        .testTag("shared_post_nested_card"),
+      shape = RoundedCornerShape(12.dp),
+      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    ) {
+      Column(modifier = Modifier.padding(vertical = 10.dp)) {
+        // Original Author Header
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          UserAvatar(
+            avatarUrl = sharedPost.authorAvatar,
+            name = sharedPost.authorName,
+            size = 36.dp,
+            onClick = onAuthorClick
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = sharedPost.authorName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = if (onAuthorClick != null) Modifier.clickable { onAuthorClick() } else Modifier
+              )
+              if (sharedPost.isAuthorVerified) {
+                Spacer(modifier = Modifier.width(4.dp))
+                VerifiedBadge(size = 12.dp)
+              }
+              if (!sharedPost.actionContextText.isNullOrBlank()) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = sharedPost.actionContextText,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Text(
+                text = formatRelativeTime(sharedPost.timestamp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                text = "•",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Icon(
+                imageVector = when (sharedPost.audience) {
+                  PostAudience.FRIENDS -> Icons.Default.Group
+                  PostAudience.ONLY_ME -> Icons.Default.Lock
+                  else -> Icons.Default.Public
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(10.dp)
+              )
+            }
+          }
+        }
+
+        // Original Feeling / Activity
+        if (!sharedPost.feelingOrActivity.isNullOrBlank()) {
+          Text(
+            text = sharedPost.feelingOrActivity,
+            style = MaterialTheme.typography.labelSmall,
+            color = SocivaPurple,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+          )
+        }
+
+        // Original Content
+        if (sharedPost.content.isNotBlank()) {
+          Text(
+            text = sharedPost.content,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+          )
+        }
+
+        // Original Media Gallery or Avatar/Cover frame
+        if (sharedPost.mediaUrls.isNotEmpty()) {
+          if (sharedPost.postType == PostType.PROFILE_PICTURE_UPDATE) {
+            Box(
+              modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                .padding(vertical = 16.dp),
+              contentAlignment = Alignment.Center
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(180.dp)
+                  .clip(CircleShape)
+                  .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                  .border(4.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), CircleShape)
+              ) {
+                AsyncImage(
+                  model = ImageRequest.Builder(LocalContext.current)
+                    .data(sharedPost.mediaUrls.first())
+                    .crossfade(true)
+                    .build(),
+                  contentDescription = "Original updated profile picture",
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.fillMaxSize()
+                )
+              }
+            }
+          } else if (sharedPost.postType == PostType.COVER_PHOTO_UPDATE) {
+            Box(
+              modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+            ) {
+              AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                  .data(sharedPost.mediaUrls.first())
+                  .crossfade(true)
+                  .build(),
+                contentDescription = "Original updated cover photo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+              )
+            }
+          } else {
+            Spacer(modifier = Modifier.height(4.dp))
+            PostMediaGallery(mediaUrls = sharedPost.mediaUrls)
+          }
         }
       }
     }

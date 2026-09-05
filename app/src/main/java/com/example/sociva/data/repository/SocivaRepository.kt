@@ -560,6 +560,36 @@ class SocivaRepository(
     val user = dao.getUserById(userId).first()
     if (user != null) {
       dao.updateActorAvatarInNotifications(user.fullName, newAvatarUrl)
+
+      // Automatic Profile Picture Update Post (Real database post)
+      val pronoun = when (user.gender.trim().lowercase(java.util.Locale.ROOT)) {
+        "male" -> "his"
+        "female" -> "her"
+        else -> "their"
+      }
+      val actionContext = "updated $pronoun profile picture."
+      val settings = dao.getUserSettingsSync(userId)
+      val audienceStr = when (settings?.profileVisibility) {
+        "Friends Only" -> "Friends"
+        "Private" -> "Only Me"
+        else -> "Public"
+      }
+      val postId = "post_avatar_${userId}_${now}"
+      val postEntity = PostEntity(
+        id = postId,
+        authorId = userId,
+        authorName = user.fullName,
+        authorUsername = user.username,
+        authorAvatar = newAvatarUrl,
+        isAuthorVerified = user.isVerified,
+        timestamp = now,
+        content = "",
+        mediaUrlsString = newAvatarUrl,
+        audience = audienceStr,
+        postType = "PROFILE_PICTURE_UPDATE",
+        actionContextText = actionContext
+      )
+      dao.insertPost(postEntity)
     }
   }
 
@@ -580,6 +610,38 @@ class SocivaRepository(
   suspend fun updateCoverPhoto(userId: String, newCoverUrl: String) {
     val now = System.currentTimeMillis()
     dao.updateUserCover(userId, newCoverUrl, now)
+    val user = dao.getUserById(userId).first()
+    if (user != null) {
+      // Automatic Cover Photo Update Post (Real database post)
+      val pronoun = when (user.gender.trim().lowercase(java.util.Locale.ROOT)) {
+        "male" -> "his"
+        "female" -> "her"
+        else -> "their"
+      }
+      val actionContext = "updated $pronoun cover photo."
+      val settings = dao.getUserSettingsSync(userId)
+      val audienceStr = when (settings?.profileVisibility) {
+        "Friends Only" -> "Friends"
+        "Private" -> "Only Me"
+        else -> "Public"
+      }
+      val postId = "post_cover_${userId}_${now}"
+      val postEntity = PostEntity(
+        id = postId,
+        authorId = userId,
+        authorName = user.fullName,
+        authorUsername = user.username,
+        authorAvatar = user.avatarUrl,
+        isAuthorVerified = user.isVerified,
+        timestamp = now,
+        content = "",
+        mediaUrlsString = newCoverUrl,
+        audience = audienceStr,
+        postType = "COVER_PHOTO_UPDATE",
+        actionContextText = actionContext
+      )
+      dao.insertPost(postEntity)
+    }
   }
 
   suspend fun removeCoverPhoto(userId: String) {
@@ -592,6 +654,13 @@ class SocivaRepository(
     val allUsersMap = dao.getAllUsers().first().associateBy { it.id }
     val allPostReactions = dao.getAllPostReactions().first()
     val reactionsByPost = allPostReactions.groupBy { it.postId }
+
+    val originalPostIds = entities.mapNotNull { it.originalPostId }.distinct()
+    val originalEntitiesMap = if (originalPostIds.isNotEmpty()) {
+      dao.findPostsByIds(originalPostIds).associateBy { it.id }
+    } else {
+      emptyMap()
+    }
 
     return entities.map { postEntity ->
       val tags = dao.getPostTags(postEntity.id)
@@ -624,12 +693,54 @@ class SocivaRepository(
         postEntity.likesCount
       }
 
+      val sharedPostPreview = if (postEntity.postType == "SHARED_POST" && postEntity.originalPostId != null) {
+        val orig = originalEntitiesMap[postEntity.originalPostId]
+        if (orig != null) {
+          val origAuthor = allUsersMap[orig.authorId]
+          val origAudience = when (orig.audience) {
+            "Friends" -> PostAudience.FRIENDS
+            "Only Me" -> PostAudience.ONLY_ME
+            else -> PostAudience.PUBLIC
+          }
+          SharedPostPreview(
+            id = orig.id,
+            authorId = orig.authorId,
+            authorName = origAuthor?.fullName ?: orig.authorName,
+            authorUsername = origAuthor?.username ?: orig.authorUsername,
+            authorAvatar = origAuthor?.avatarUrl ?: orig.authorAvatar,
+            isAuthorVerified = origAuthor?.isVerified ?: orig.isAuthorVerified,
+            timestamp = orig.timestamp,
+            content = orig.content,
+            mediaUrls = if (orig.mediaUrlsString.isBlank()) emptyList() else orig.mediaUrlsString.split(","),
+            feelingOrActivity = orig.feelingOrActivity,
+            postType = try { PostType.valueOf(orig.postType) } catch (e: Exception) { PostType.NORMAL },
+            actionContextText = orig.actionContextText,
+            audience = origAudience,
+            isUnavailable = false
+          )
+        } else {
+          SharedPostPreview(
+            id = postEntity.originalPostId,
+            authorId = "",
+            authorName = "",
+            authorUsername = "",
+            authorAvatar = "",
+            timestamp = 0L,
+            content = "This content isn't available right now. When this happens, it's usually because the owner only shared it with a small group of people, changed who can see it or it's been deleted.",
+            isUnavailable = true
+          )
+        }
+      } else {
+        null
+      }
+
       postEntity.toDomain(
         taggedUsers = taggedUsers,
         topReactionEmojis = topReactionEmojis,
         reactionTypeCounts = reactionTypeCounts,
         computedLikesCount = effectiveLikesCount,
-        currentMyReaction = myPostReaction
+        currentMyReaction = myPostReaction,
+        sharedPostPreview = sharedPostPreview
       )
     }
   }
@@ -719,8 +830,18 @@ class SocivaRepository(
   }
 
   suspend fun deletePost(postId: String) {
-    dao.deletePostById(postId)
-    dao.deleteReactionsForPost(postId)
+    val post = dao.findPostById(postId)
+    if (post != null) {
+      if (post.postType == "SHARED_POST" && post.originalPostId != null) {
+        dao.decrementSharesCount(post.originalPostId)
+      }
+      dao.deletePostById(postId)
+      dao.deleteReactionsForPost(postId)
+    }
+  }
+
+  suspend fun updatePostContent(postId: String, newContent: String) {
+    dao.updatePostContent(postId, newContent)
   }
 
   suspend fun setReaction(postId: String, reaction: ReactionType?, userId: String = "user_me") {
@@ -789,6 +910,51 @@ class SocivaRepository(
   suspend fun sharePost(postId: String) {
     val post = dao.getPostById(postId).first() ?: return
     dao.updatePost(post.copy(sharesCount = post.sharesCount + 1))
+  }
+
+  suspend fun createSharedPost(
+    sharer: User,
+    originalPost: Post,
+    caption: String,
+    audience: PostAudience
+  ) {
+    val now = System.currentTimeMillis()
+    val rootOriginalPostId = if (originalPost.postType == PostType.SHARED_POST && !originalPost.originalPostId.isNullOrBlank()) {
+      originalPost.originalPostId
+    } else {
+      originalPost.id
+    }
+
+    val postId = "post_shared_${sharer.id}_${now}"
+    val audienceStr = when (audience) {
+      PostAudience.FRIENDS -> "Friends"
+      PostAudience.ONLY_ME -> "Only Me"
+      else -> "Public"
+    }
+
+    val sharedPostEntity = PostEntity(
+      id = postId,
+      authorId = sharer.id,
+      authorName = sharer.fullName,
+      authorUsername = sharer.username,
+      authorAvatar = sharer.avatarUrl,
+      isAuthorVerified = sharer.isVerified,
+      timestamp = now,
+      content = caption.trim(),
+      mediaUrlsString = "", // Preserves original post reference, does not duplicate media files
+      audience = audienceStr,
+      postType = "SHARED_POST",
+      originalPostId = rootOriginalPostId,
+      actionContextText = "shared a post."
+    )
+
+    dao.insertPost(sharedPostEntity)
+
+    // Increment share counter on the original post(s)
+    dao.incrementSharesCount(originalPost.id)
+    if (rootOriginalPostId != originalPost.id) {
+      dao.incrementSharesCount(rootOriginalPostId)
+    }
   }
 
   // --- Comments ---
@@ -1865,7 +2031,8 @@ private fun PostEntity.toDomain(
   computedLikesCount: Int = likesCount,
   currentMyReaction: ReactionType? = myReaction?.let {
     try { ReactionType.valueOf(it) } catch (e: Exception) { null }
-  }
+  },
+  sharedPostPreview: SharedPostPreview? = null
 ) = Post(
   id = id,
   authorId = authorId,
@@ -1889,7 +2056,11 @@ private fun PostEntity.toDomain(
   isSaved = isSaved,
   taggedUsers = taggedUsers,
   topReactionEmojis = topReactionEmojis,
-  reactionTypeCounts = reactionTypeCounts
+  reactionTypeCounts = reactionTypeCounts,
+  postType = try { PostType.valueOf(postType) } catch (e: Exception) { PostType.NORMAL },
+  originalPostId = originalPostId,
+  actionContextText = actionContextText,
+  sharedPost = sharedPostPreview
 )
 
 private fun CommentEntity.toDomain(

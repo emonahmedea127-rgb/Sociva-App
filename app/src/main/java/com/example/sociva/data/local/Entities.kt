@@ -98,7 +98,10 @@ data class PostEntity(
   val commentsCount: Int = 0,
   val sharesCount: Int = 0,
   val myReaction: String? = null,
-  val isSaved: Boolean = false
+  val isSaved: Boolean = false,
+  val postType: String = "NORMAL", // NORMAL, PROFILE_PICTURE_UPDATE, COVER_PHOTO_UPDATE, SHARED_POST
+  val originalPostId: String? = null,
+  val actionContextText: String? = null
 )
 
 @Entity(

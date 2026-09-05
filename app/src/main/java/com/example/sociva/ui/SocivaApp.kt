@@ -38,6 +38,9 @@ fun SocivaApp(
   val isLoggedIn by viewModel.isLoggedIn.collectAsState()
   val commentsPostId by viewModel.commentsPostId.collectAsState()
   val reactionsModalPostId by viewModel.reactionsModalPostId.collectAsState()
+  val sharingPost by viewModel.sharingPost.collectAsState()
+  val editingPost by viewModel.editingPost.collectAsState()
+  val currentUser by viewModel.currentUser.collectAsState()
   val activeProfileUserId by viewModel.activeProfileUserId.collectAsState()
   val activeConversationId by viewModel.activeConversationId.collectAsState()
   val notifications by viewModel.notifications.collectAsState()
@@ -325,6 +328,29 @@ fun SocivaApp(
       postId = reactionsModalPostId!!,
       viewModel = viewModel,
       onDismiss = { viewModel.closeReactionsModal() }
+    )
+  }
+
+  // Share Post Bottom Sheet
+  if (sharingPost != null) {
+    SharePostBottomSheet(
+      post = sharingPost!!,
+      currentUser = currentUser,
+      onDismiss = { viewModel.closeShareComposer() },
+      onShare = { caption, audience ->
+        viewModel.createSharedPost(sharingPost!!, caption, audience)
+      }
+    )
+  }
+
+  // Edit Post Dialog
+  if (editingPost != null) {
+    EditPostDialog(
+      post = editingPost!!,
+      onDismiss = { viewModel.closeEditPost() },
+      onSave = { newContent ->
+        viewModel.updatePostContent(editingPost!!.id, newContent)
+      }
     )
   }
 }

@@ -145,6 +145,30 @@ data class User(
   val reviewTagsBeforeAppearing: Boolean = false
 )
 
+enum class PostType {
+  NORMAL,
+  PROFILE_PICTURE_UPDATE,
+  COVER_PHOTO_UPDATE,
+  SHARED_POST
+}
+
+data class SharedPostPreview(
+  val id: String,
+  val authorId: String,
+  val authorName: String,
+  val authorUsername: String,
+  val authorAvatar: String,
+  val isAuthorVerified: Boolean = false,
+  val timestamp: Long,
+  val content: String,
+  val mediaUrls: List<String> = emptyList(),
+  val feelingOrActivity: String? = null,
+  val postType: PostType = PostType.NORMAL,
+  val actionContextText: String? = null,
+  val audience: PostAudience = PostAudience.PUBLIC,
+  val isUnavailable: Boolean = false
+)
+
 data class Post(
   val id: String,
   val authorId: String,
@@ -164,7 +188,11 @@ data class Post(
   val isSaved: Boolean = false,
   val taggedUsers: List<TaggedUser> = emptyList(),
   val topReactionEmojis: List<String> = emptyList(),
-  val reactionTypeCounts: Map<ReactionType, Int> = emptyMap()
+  val reactionTypeCounts: Map<ReactionType, Int> = emptyMap(),
+  val postType: PostType = PostType.NORMAL,
+  val originalPostId: String? = null,
+  val actionContextText: String? = null,
+  val sharedPost: SharedPostPreview? = null
 )
 
 data class Comment(

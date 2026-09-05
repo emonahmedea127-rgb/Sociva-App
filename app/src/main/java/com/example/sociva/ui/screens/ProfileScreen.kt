@@ -743,10 +743,12 @@ fun ProfileScreen(
                 currentUser = currentUser,
                 onReaction = { reaction -> viewModel.setReaction(post.id, reaction) },
                 onCommentClick = { viewModel.openComments(post.id) },
-                onShareClick = { viewModel.sharePost(post.id) },
+                onShareClick = { viewModel.openShareComposer(post) },
                 onSaveClick = { viewModel.toggleSavePost(post.id) },
-                onAuthorClick = {},
+                onAuthorClick = { viewModel.navigateToProfile(post.authorId) },
+                onSharedAuthorClick = { origAuthorId -> viewModel.navigateToProfile(origAuthorId) },
                 onDeleteClick = { viewModel.deletePost(post.id) },
+                onEditClick = { viewModel.openEditPost(post) },
                 onReportClick = {
                   viewModel.submitReport("Post", post.id, post.content.take(30), "Inappropriate")
                 },

@@ -79,6 +79,14 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   private val _reactionsModalPostId = MutableStateFlow<String?>(null)
   val reactionsModalPostId: StateFlow<String?> = _reactionsModalPostId.asStateFlow()
 
+  // Share Post Composer State
+  private val _sharingPost = MutableStateFlow<Post?>(null)
+  val sharingPost: StateFlow<Post?> = _sharingPost.asStateFlow()
+
+  // Edit Post Dialog State
+  private val _editingPost = MutableStateFlow<Post?>(null)
+  val editingPost: StateFlow<Post?> = _editingPost.asStateFlow()
+
   // Search State
   private val _searchQuery = MutableStateFlow("")
   val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -509,10 +517,57 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     }
   }
 
+  fun openShareComposer(post: Post) {
+    if (post.audience == PostAudience.ONLY_ME && post.authorId != _currentUserId.value) {
+      showToast("This post's privacy settings prevent sharing.")
+      return
+    }
+    _sharingPost.value = post
+  }
+
+  fun closeShareComposer() {
+    _sharingPost.value = null
+  }
+
+  fun createSharedPost(originalPost: Post, caption: String, audience: PostAudience) {
+    val author = currentUser.value ?: return
+    viewModelScope.launch {
+      repository.createSharedPost(
+        sharer = author,
+        originalPost = originalPost,
+        caption = caption,
+        audience = audience
+      )
+      _sharingPost.value = null
+      showToast("Post shared to your timeline! 🚀")
+    }
+  }
+
+  fun openEditPost(post: Post) {
+    _editingPost.value = post
+  }
+
+  fun closeEditPost() {
+    _editingPost.value = null
+  }
+
+  fun updatePostContent(postId: String, newContent: String) {
+    viewModelScope.launch {
+      repository.updatePostContent(postId, newContent.trim())
+      _editingPost.value = null
+      showToast("Post updated! ✏️")
+    }
+  }
+
   fun sharePost(postId: String) {
     viewModelScope.launch {
-      repository.sharePost(postId)
-      showToast("Post shared to your timeline! 🚀")
+      val p = allPosts.value.find { it.id == postId }
+      if (p != null) {
+        openShareComposer(p)
+      } else {
+        repository.sharePost(postId)
+        showToast("Post shared to your timeline! 🚀")
+      }
     }
   }
 
