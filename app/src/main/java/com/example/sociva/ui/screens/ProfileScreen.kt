@@ -78,6 +78,14 @@ fun ProfileScreen(
   val isUserBlocked by viewModel.isUserBlockedFlow(userId).collectAsState(initial = false)
   val friendStatus by viewModel.getFriendStatusFlow(userId).collectAsState(initial = FriendStatus.NONE)
   val isFollowing by viewModel.isFollowingFlow(userId).collectAsState(initial = false)
+  val profileViewStats by viewModel.getProfileViewStatsForUser(userId).collectAsState(initial = com.example.sociva.data.model.ProfileViewStats())
+
+  LaunchedEffect(userId) {
+    if (!isMyProfile) {
+      viewModel.recordProfileVisit(userId)
+    }
+  }
+
   var showCancelRequestDialog by remember { mutableStateOf(false) }
   var showRemoveFriendDialog by remember { mutableStateOf(false) }
   var showBlockDialog by remember { mutableStateOf(false) }
@@ -476,6 +484,105 @@ fun ProfileScreen(
             ProfileStat(label = "Followers", count = "${user?.followersCount ?: 0}")
             ProfileStat(label = "Following", count = "${user?.followingCount ?: 0}")
             ProfileStat(label = "Friends", count = "${user?.friendsCount ?: 0}")
+          }
+
+          // Profile Views Card
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("profile_views_section")
+              .clip(RoundedCornerShape(12.dp))
+              .clickable {
+                if (isMyProfile) {
+                  viewModel.openProfileVisitors()
+                } else {
+                  viewModel.showToast("Visitor history is private to the profile owner.")
+                }
+              },
+            colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(
+                    Icons.Default.Visibility,
+                    contentDescription = "Profile Views",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                  )
+                }
+                Column {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                  ) {
+                    Text(
+                      text = "Profile Views",
+                      fontWeight = FontWeight.SemiBold,
+                      fontSize = 14.sp,
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isMyProfile && profileViewStats.unseenCount > 0) {
+                      Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(10.dp)
+                      ) {
+                        Text(
+                          text = "${profileViewStats.unseenCount} new",
+                          color = MaterialTheme.colorScheme.onPrimary,
+                          fontSize = 10.sp,
+                          fontWeight = FontWeight.Bold,
+                          modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                      }
+                    }
+                  }
+                  Text(
+                    text = if (isMyProfile) "Tap to view visitor history" else "Total visits recorded",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+              ) {
+                Text(
+                  text = "${profileViewStats.totalCount}",
+                  fontSize = 18.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary
+                )
+                if (isMyProfile) {
+                  Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                  )
+                }
+              }
+            }
           }
 
           // Primary Action Buttons

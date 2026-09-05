@@ -138,6 +138,18 @@ fun SettingsScreen(
             onClick = { showBlockedUsersSheet = true },
             tag = "setting_blocked_users_row"
           )
+          HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+          SettingSwitchRow(
+            title = "Profile View History",
+            subtitle = if (settings.profileViewHistoryEnabled)
+              "Control whether your profile visits appear in other people's Profile Visitors list (ON)"
+            else
+              "Visits are anonymous and hidden from visitor lists (OFF)",
+            icon = Icons.Default.RemoveRedEye,
+            checked = settings.profileViewHistoryEnabled,
+            onCheckedChange = { viewModel.updateProfileViewHistoryEnabled(it) },
+            tag = "setting_profile_view_history_switch"
+          )
         }
       }
 

@@ -28,9 +28,10 @@ import androidx.room.RoomDatabase
     PostTagEntity::class,
     CommentMentionEntity::class,
     UserSettingsEntity::class,
-    BlockedUserEntity::class
+    BlockedUserEntity::class,
+    ProfileViewEntity::class
   ],
-  version = 10,
+  version = 11,
   exportSchema = false
 )
 abstract class SocivaDatabase : RoomDatabase() {

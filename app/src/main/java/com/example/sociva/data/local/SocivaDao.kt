@@ -390,6 +390,9 @@ interface SocivaDao {
   @Query("SELECT * FROM friends WHERE userId = :userId ORDER BY createdAt DESC")
   fun getFriendshipsForUser(userId: String): Flow<List<FriendshipEntity>>
 
+  @Query("SELECT * FROM friends")
+  fun getAllFriendships(): Flow<List<FriendshipEntity>>
+
   @Query("SELECT friendId FROM friends WHERE userId = :userId")
   fun getFriendIdsForUser(userId: String): Flow<List<String>>
 
@@ -575,6 +578,9 @@ interface SocivaDao {
   @Query("UPDATE user_settings SET passwordLastUpdated = :timestamp, updatedAt = :timestamp WHERE userId = :userId")
   suspend fun updatePasswordLastUpdated(userId: String, timestamp: Long = System.currentTimeMillis())
 
+  @Query("UPDATE user_settings SET profileViewHistoryEnabled = :enabled, updatedAt = :timestamp WHERE userId = :userId")
+  suspend fun updateProfileViewHistoryEnabled(userId: String, enabled: Boolean, timestamp: Long = System.currentTimeMillis())
+
   // Blocked Users
   @Query("SELECT * FROM blocked_users WHERE blockerId = :blockerId ORDER BY createdAt DESC")
   fun getBlockedUsersForUser(blockerId: String): Flow<List<BlockedUserEntity>>
@@ -611,5 +617,64 @@ interface SocivaDao {
 
   @Query("DELETE FROM blocked_users WHERE blockerId = :blockerId AND blockedId = :blockedId")
   suspend fun deleteBlock(blockerId: String, blockedId: String)
+
+  // Profile Views
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertProfileView(view: ProfileViewEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertProfileViews(views: List<ProfileViewEntity>)
+
+  @Query("""
+    SELECT * FROM profile_views 
+    WHERE viewedUserId = :viewedUserId 
+      AND viewerUserId = :viewerUserId 
+      AND viewedAt >= :thresholdTime 
+    ORDER BY viewedAt DESC 
+    LIMIT 1
+  """)
+  suspend fun getRecentProfileView(viewedUserId: String, viewerUserId: String, thresholdTime: Long): ProfileViewEntity?
+
+  @Query("SELECT COUNT(*) FROM profile_views WHERE viewedUserId = :viewedUserId")
+  fun getTotalProfileViewsCount(viewedUserId: String): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM profile_views WHERE viewedUserId = :viewedUserId AND viewedAt >= :sinceTimestamp")
+  fun getProfileViewsCountSince(viewedUserId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("SELECT COUNT(*) FROM profile_views WHERE viewedUserId = :viewedUserId AND seenAt IS NULL AND isAnonymous = 0 AND viewerUserId != ''")
+  fun getUnseenProfileViewsCount(viewedUserId: String): Flow<Int>
+
+  @Query("UPDATE profile_views SET seenAt = :seenAt WHERE viewedUserId = :viewedUserId AND seenAt IS NULL")
+  suspend fun markAllProfileViewsSeen(viewedUserId: String, seenAt: Long = System.currentTimeMillis())
+
+  @Query("""
+    SELECT * FROM profile_views 
+    WHERE viewedUserId = :viewedUserId 
+      AND isAnonymous = 0 
+      AND viewerUserId != '' 
+    ORDER BY viewedAt DESC 
+    LIMIT :limit OFFSET :offset
+  """)
+  fun getProfileVisitorsPaged(viewedUserId: String, limit: Int, offset: Int): Flow<List<ProfileViewEntity>>
+
+  @Query("""
+    SELECT * FROM profile_views 
+    WHERE viewedUserId = :viewedUserId 
+      AND isAnonymous = 0 
+      AND viewerUserId != '' 
+    ORDER BY viewedAt DESC 
+    LIMIT :limit
+  """)
+  fun getProfileVisitors(viewedUserId: String, limit: Int): Flow<List<ProfileViewEntity>>
+
+  @Query("""
+    SELECT COUNT(*) FROM friends f1 
+    INNER JOIN friends f2 ON f1.friendId = f2.friendId 
+    WHERE f1.userId = :userA AND f2.userId = :userB
+  """)
+  suspend fun getMutualFriendsCount(userA: String, userB: String): Int
+
+  @Query("DELETE FROM profile_views WHERE viewedUserId = :userId OR viewerUserId = :userId")
+  suspend fun deleteProfileViewsForUser(userId: String)
 }
 

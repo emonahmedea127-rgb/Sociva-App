@@ -19,6 +19,7 @@ enum class SocivaScreen {
   MAIN,
   PROFILE,
   EDIT_PROFILE,
+  PROFILE_VISITORS,
   MESSAGES,
   CHAT_DETAIL,
   CREATE_POST,
@@ -125,6 +126,37 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   }.stateIn(
     viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
   )
+
+  val myProfileViewStats: StateFlow<ProfileViewStats> = _currentUserId.flatMapLatest { uid ->
+    repository.getProfileViewStatsFlow(uid)
+  }.stateIn(
+    viewModelScope, SharingStarted.WhileSubscribed(5000), ProfileViewStats()
+  )
+
+  fun getProfileViewStatsForUser(userId: String): Flow<ProfileViewStats> =
+    repository.getProfileViewStatsFlow(userId)
+
+  fun getProfileVisitorsFlow(limit: Int = 50): Flow<List<ProfileVisitorItem>> =
+    repository.getProfileVisitorsFlow(_currentUserId.value, limit)
+
+  fun recordProfileVisit(targetUserId: String) {
+    viewModelScope.launch {
+      repository.recordProfileVisit(_currentUserId.value, targetUserId)
+    }
+  }
+
+  fun markProfileVisitorsSeen() {
+    viewModelScope.launch {
+      repository.markProfileVisitorsSeen(_currentUserId.value)
+    }
+  }
+
+  fun updateProfileViewHistoryEnabled(enabled: Boolean) {
+    viewModelScope.launch {
+      repository.updateProfileViewHistorySetting(_currentUserId.value, enabled)
+      showToast(if (enabled) "Profile View History turned on" else "Profile View History turned off")
+    }
+  }
 
   init {
     viewModelScope.launch {
@@ -261,6 +293,11 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
   fun navigateToProfile(userId: String) {
     _activeProfileUserId.value = userId
     _activeScreen.value = SocivaScreen.PROFILE
+  }
+
+  fun openProfileVisitors() {
+    _activeScreen.value = SocivaScreen.PROFILE_VISITORS
+    markProfileVisitorsSeen()
   }
 
   fun navigateToChat(convId: String) {
@@ -889,6 +926,23 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
       val req = friendRequests.value.find { it.id == requestId }
       repository.acceptFriendRequest(requestId, "user_me")
       showToast("You and ${req?.fullName ?: "user"} are now friends! 🤝")
+    }
+  }
+
+  fun acceptFriendRequestFromUser(senderUserId: String) {
+    viewModelScope.launch {
+      val req = friendRequests.value.find { it.senderId == senderUserId }
+      if (req != null) {
+        repository.acceptFriendRequest(req.id, "user_me")
+        showToast("You and ${req.fullName} are now friends! 🤝")
+      } else {
+        // Fallback: check pending request between
+        val directReq = repository.getIncomingFriendRequests(_currentUserId.value).first().find { it.senderId == senderUserId }
+        if (directReq != null) {
+          repository.acceptFriendRequest(directReq.id, "user_me")
+          showToast("Friend request accepted! 🤝")
+        }
+      }
     }
   }
 

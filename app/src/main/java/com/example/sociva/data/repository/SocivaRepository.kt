@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import java.util.UUID
 
 class SocivaRepository(
@@ -34,6 +35,10 @@ class SocivaRepository(
         if (existingPostReactions == 0) {
           dao.insertPostReactions(SeedData.postReactions)
         }
+        val existingViews = dao.getTotalProfileViewsCount("user_me").first()
+        if (existingViews == 0) {
+          dao.insertProfileViews(SeedData.profileViews)
+        }
       }
       // Ensure current user settings are seeded if missing
       val existingSettings = dao.getUserSettingsSync("user_me")
@@ -48,7 +53,8 @@ class SocivaRepository(
             dataSaver = false,
             pushNotifications = true,
             inAppSounds = true,
-            language = "English"
+            language = "English",
+            profileViewHistoryEnabled = true
           )
         )
       }
@@ -73,6 +79,7 @@ class SocivaRepository(
     dao.insertPages(SeedData.pages)
     dao.insertGroups(SeedData.groups)
     dao.insertReports(SeedData.reports)
+    dao.insertProfileViews(SeedData.profileViews)
     dao.insertOrUpdateUserSettings(
       UserSettingsEntity(
         userId = "user_me",
@@ -83,7 +90,8 @@ class SocivaRepository(
         dataSaver = false,
         pushNotifications = true,
         inAppSounds = true,
-        language = "English"
+        language = "English",
+        profileViewHistoryEnabled = true
       )
     )
   }
@@ -1941,6 +1949,153 @@ class SocivaRepository(
     dao.deleteBlock(blockerId, blockedId)
     return true
   }
+
+  // --- Profile Views ---
+
+  suspend fun recordProfileVisit(viewerUserId: String = "user_me", viewedUserId: String) {
+    try {
+      if (viewerUserId.isBlank() || viewedUserId.isBlank()) return
+      // Requirement 3: Do not track self-views
+      if (viewerUserId == viewedUserId || (viewerUserId == "user_me" && viewedUserId == "user_me")) return
+
+      // Requirement 10: Check if blocked either way
+      if (dao.isBlockedEitherWay(viewerUserId, viewedUserId)) return
+
+      // Verify target user exists
+      val targetUser = dao.getUserById(viewedUserId).first() ?: return
+
+      // Requirement 11 & 12: Check viewer's privacy setting
+      val viewerSettings = dao.getUserSettings(viewerUserId).first()
+      val isHistoryEnabled = viewerSettings?.profileViewHistoryEnabled ?: true
+
+      // Requirement 4: Prevent excessive duplicate views (30-minute deduplication window)
+      val thirtyMinutesAgo = System.currentTimeMillis() - (30 * 60 * 1000L)
+      val effectiveViewerId = if (isHistoryEnabled) viewerUserId else ""
+      val recentView = dao.getRecentProfileView(viewedUserId, effectiveViewerId, thirtyMinutesAgo)
+      if (recentView != null) {
+        // Within 30 minutes, already counted as one visit
+        return
+      }
+
+      val viewEntity = ProfileViewEntity(
+        id = "pv_" + UUID.randomUUID().toString().take(12),
+        viewedUserId = viewedUserId,
+        viewerUserId = effectiveViewerId,
+        viewedAt = System.currentTimeMillis(),
+        createdAt = System.currentTimeMillis(),
+        seenAt = null,
+        isAnonymous = !isHistoryEnabled
+      )
+      dao.insertProfileView(viewEntity)
+    } catch (e: Exception) {
+      // Requirement 24 & 25: Performance & Error Handling - Fail silently, never crash
+    }
+  }
+
+  fun getProfileViewStatsFlow(viewedUserId: String): Flow<ProfileViewStats> {
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    val startOfDay = cal.timeInMillis
+
+    cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
+    val startOfWeek = cal.timeInMillis
+
+    cal.set(Calendar.DAY_OF_MONTH, 1)
+    val startOfMonth = cal.timeInMillis
+
+    return combine(
+      dao.getProfileViewsCountSince(viewedUserId, startOfDay),
+      dao.getProfileViewsCountSince(viewedUserId, startOfWeek),
+      dao.getProfileViewsCountSince(viewedUserId, startOfMonth),
+      dao.getTotalProfileViewsCount(viewedUserId),
+      dao.getUnseenProfileViewsCount(viewedUserId)
+    ) { today, week, month, total, unseen ->
+      ProfileViewStats(
+        todayCount = today,
+        thisWeekCount = week,
+        thisMonthCount = month,
+        totalCount = total,
+        unseenCount = unseen
+      )
+    }
+  }
+
+  fun getProfileVisitorsFlow(profileOwnerId: String, limit: Int = 50): Flow<List<ProfileVisitorItem>> {
+    val visitorsFlow = dao.getProfileVisitors(profileOwnerId, limit)
+    val usersFlow = dao.getAllUsers()
+    val blockedFlow = dao.getAllBlockedEitherWayIdsFlow(profileOwnerId)
+    val friendshipsFlow = dao.getAllFriendships()
+    val sentReqsFlow = dao.getSentFriendRequests(profileOwnerId)
+    val incomingReqsFlow = dao.getIncomingFriendRequests(profileOwnerId)
+    val followsFlow = dao.getFollowsForUser(profileOwnerId)
+
+    val baseCombined = combine(
+      visitorsFlow,
+      usersFlow,
+      blockedFlow,
+      friendshipsFlow
+    ) { visitors, users, blockedIds, friendships ->
+      Triple(visitors, users, Pair(blockedIds, friendships))
+    }
+
+    val relationsCombined = combine(sentReqsFlow, incomingReqsFlow, followsFlow) { sent, incoming, follows ->
+      Triple(sent, incoming, follows)
+    }
+
+    return baseCombined.combine(relationsCombined) { (visitors, users, blockedAndFriendships), (sentReqs, incomingReqs, follows) ->
+      val (blockedIds, friendships) = blockedAndFriendships
+      val userMap = users.associateBy { it.id }
+      val blockedSet = blockedIds.toSet()
+      val ownerFriends = friendships.filter { it.userId == profileOwnerId }.map { it.friendId }.toSet()
+      val sentReqTargets = sentReqs.filter { it.status == "pending" }.map { it.receiverId }.toSet()
+      val incomingReqSenders = incomingReqs.filter { it.status == "pending" }.map { it.senderId }.toSet()
+      val followingSet = follows.map { it.followingId }.toSet()
+
+      visitors.filter { view ->
+        view.viewerUserId.isNotBlank() && !view.isAnonymous && !blockedSet.contains(view.viewerUserId)
+      }.mapNotNull { view ->
+        val entity = userMap[view.viewerUserId] ?: return@mapNotNull null
+        val viewerId = view.viewerUserId
+
+        val friendStatus = when {
+          ownerFriends.contains(viewerId) -> FriendStatus.FRIENDS
+          sentReqTargets.contains(viewerId) -> FriendStatus.REQUEST_SENT
+          incomingReqSenders.contains(viewerId) -> FriendStatus.REQUEST_RECEIVED
+          else -> FriendStatus.NONE
+        }
+
+        val isFollowing = followingSet.contains(viewerId)
+
+        val viewerFriends = friendships.filter { it.userId == viewerId }.map { it.friendId }.toSet()
+        val mutualCount = ownerFriends.intersect(viewerFriends).size
+
+        ProfileVisitorItem(
+          viewId = view.id,
+          user = entity.toDomain(),
+          viewedAt = view.viewedAt,
+          isSeen = view.seenAt != null,
+          friendStatus = friendStatus,
+          isFollowing = isFollowing,
+          mutualFriendsCount = mutualCount
+        )
+      }
+    }
+  }
+
+  suspend fun markProfileVisitorsSeen(profileOwnerId: String) {
+    try {
+      dao.markAllProfileViewsSeen(profileOwnerId, System.currentTimeMillis())
+    } catch (e: Exception) {
+      // Fail silently
+    }
+  }
+
+  suspend fun updateProfileViewHistorySetting(userId: String = "user_me", enabled: Boolean) {
+    dao.updateProfileViewHistoryEnabled(userId, enabled)
+  }
 }
 
 // Entity to Domain mappers
@@ -1954,7 +2109,8 @@ private fun UserSettingsEntity.toDomain() = UserSettings(
   pushNotifications = pushNotifications,
   inAppSounds = inAppSounds,
   language = language,
-  passwordLastUpdated = passwordLastUpdated
+  passwordLastUpdated = passwordLastUpdated,
+  profileViewHistoryEnabled = profileViewHistoryEnabled
 )
 private fun UserEntity.toDomain() = User(
   id = id,

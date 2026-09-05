@@ -134,6 +134,13 @@ fun SocivaApp(
       )
       return
     }
+    SocivaScreen.PROFILE_VISITORS -> {
+      ProfileVisitorsScreen(
+        viewModel = viewModel,
+        onNavigateBack = { viewModel.navigateTo(SocivaScreen.PROFILE) }
+      )
+      return
+    }
     SocivaScreen.SEARCH -> {
       SearchScreen(
         viewModel = viewModel,

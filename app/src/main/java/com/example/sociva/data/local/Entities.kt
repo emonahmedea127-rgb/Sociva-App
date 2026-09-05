@@ -439,6 +439,7 @@ data class UserSettingsEntity(
   val inAppSounds: Boolean = true,
   val language: String = "English",
   val passwordLastUpdated: Long = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000), // ~3 months ago
+  val profileViewHistoryEnabled: Boolean = true,
   val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -455,6 +456,25 @@ data class BlockedUserEntity(
   val blockerId: String,
   val blockedId: String,
   val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+  tableName = "profile_views",
+  indices = [
+    Index(value = ["viewedUserId"]),
+    Index(value = ["viewerUserId"]),
+    Index(value = ["viewedAt"]),
+    Index(value = ["viewedUserId", "viewerUserId", "viewedAt"])
+  ]
+)
+data class ProfileViewEntity(
+  @PrimaryKey val id: String,
+  val viewedUserId: String,
+  val viewerUserId: String,
+  val viewedAt: Long = System.currentTimeMillis(),
+  val createdAt: Long = System.currentTimeMillis(),
+  val seenAt: Long? = null,
+  val isAnonymous: Boolean = false
 )
 
 

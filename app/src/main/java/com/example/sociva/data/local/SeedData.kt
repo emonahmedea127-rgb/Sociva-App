@@ -979,6 +979,81 @@ object SeedData {
       status = "Pending"
     )
   )
+
+  val profileViews = listOf(
+    ProfileViewEntity(
+      id = "pv_seed_1",
+      viewedUserId = "user_me",
+      viewerUserId = "user_sarah",
+      viewedAt = now - (1000 * 60 * 5), // 5 min ago
+      createdAt = now - (1000 * 60 * 5),
+      seenAt = null,
+      isAnonymous = false
+    ),
+    ProfileViewEntity(
+      id = "pv_seed_2",
+      viewedUserId = "user_me",
+      viewerUserId = "user_alex",
+      viewedAt = now - (1000 * 60 * 24), // 24 min ago
+      createdAt = now - (1000 * 60 * 24),
+      seenAt = null,
+      isAnonymous = false
+    ),
+    ProfileViewEntity(
+      id = "pv_seed_3",
+      viewedUserId = "user_me",
+      viewerUserId = "user_michael",
+      viewedAt = now - (1000 * 60 * 120), // 2 hours ago
+      createdAt = now - (1000 * 60 * 120),
+      seenAt = null,
+      isAnonymous = false
+    ),
+    ProfileViewEntity(
+      id = "pv_seed_4",
+      viewedUserId = "user_me",
+      viewerUserId = "user_emily",
+      viewedAt = now - (1000 * 60 * 360), // 6 hours ago
+      createdAt = now - (1000 * 60 * 360),
+      seenAt = now - (1000 * 60 * 300),
+      isAnonymous = false
+    ),
+    ProfileViewEntity(
+      id = "pv_seed_5",
+      viewedUserId = "user_me",
+      viewerUserId = "user_david",
+      viewedAt = now - (1000 * 60 * 60 * 26), // yesterday
+      createdAt = now - (1000 * 60 * 60 * 26),
+      seenAt = now - (1000 * 60 * 60 * 24),
+      isAnonymous = false
+    ),
+    ProfileViewEntity(
+      id = "pv_seed_6",
+      viewedUserId = "user_me",
+      viewerUserId = "user_jessica",
+      viewedAt = now - (1000 * 60 * 60 * 48), // 2 days ago
+      createdAt = now - (1000 * 60 * 60 * 48),
+      seenAt = now - (1000 * 60 * 60 * 46),
+      isAnonymous = false
+    ),
+    ProfileViewEntity(
+      id = "pv_seed_7",
+      viewedUserId = "user_sarah",
+      viewerUserId = "user_me",
+      viewedAt = now - (1000 * 60 * 60 * 5),
+      createdAt = now - (1000 * 60 * 60 * 5),
+      seenAt = now - (1000 * 60 * 60 * 4),
+      isAnonymous = false
+    ),
+    ProfileViewEntity(
+      id = "pv_seed_8",
+      viewedUserId = "user_alex",
+      viewerUserId = "user_me",
+      viewedAt = now - (1000 * 60 * 60 * 12),
+      createdAt = now - (1000 * 60 * 60 * 12),
+      seenAt = null,
+      isAnonymous = false
+    )
+  )
 }
 
 // Type alias helper for Page entity mapping

@@ -412,7 +412,26 @@ data class UserSettings(
   val pushNotifications: Boolean = true,
   val inAppSounds: Boolean = true,
   val language: String = "English",
-  val passwordLastUpdated: Long = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
+  val passwordLastUpdated: Long = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000),
+  val profileViewHistoryEnabled: Boolean = true
+)
+
+data class ProfileViewStats(
+  val todayCount: Int = 0,
+  val thisWeekCount: Int = 0,
+  val thisMonthCount: Int = 0,
+  val totalCount: Int = 0,
+  val unseenCount: Int = 0
+)
+
+data class ProfileVisitorItem(
+  val viewId: String,
+  val user: User,
+  val viewedAt: Long,
+  val isSeen: Boolean,
+  val friendStatus: FriendStatus = FriendStatus.NONE,
+  val isFollowing: Boolean = false,
+  val mutualFriendsCount: Int = 0
 )
 
 data class BlockedUser(
