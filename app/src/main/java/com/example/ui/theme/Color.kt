@@ -2,18 +2,31 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Sociva Brand Palette - Vibrant Palette
-val SocivaIndigo = Color(0xFF4F46E5) // Vibrant Indigo
-val SocivaBlue = Color(0xFF4F46E5) // Main brand primary (Vibrant Indigo-600)
-val SocivaBlueDark = Color(0xFF4338CA)
-val SocivaBlueLight = Color(0xFF818CF8)
-val SocivaPurple = Color(0xFF9333EA) // Vibrant Purple
-val SocivaPurpleLight = Color(0xFFC084FC)
-val SocivaPink = Color(0xFFEC4899) // Vibrant Pink
-val SocivaCyan = Color(0xFF06B6D4)
-val SocivaGreen = Color(0xFF10B981) // Emerald Green
-val SocivaAmber = Color(0xFFF59E0B) // Amber
-val SocivaRed = Color(0xFFEF4444)
+// Spark Brand Palette - Vibrant Palette
+val SparkIndigo = Color(0xFF4F46E5) // Vibrant Indigo
+val SparkBlue = Color(0xFF4F46E5) // Main brand primary (Vibrant Indigo-600)
+val SparkBlueDark = Color(0xFF4338CA)
+val SparkBlueLight = Color(0xFF818CF8)
+val SparkPurple = Color(0xFF9333EA) // Vibrant Purple
+val SparkPurpleLight = Color(0xFFC084FC)
+val SparkPink = Color(0xFFEC4899) // Vibrant Pink
+val SparkCyan = Color(0xFF06B6D4)
+val SparkGreen = Color(0xFF10B981) // Emerald Green
+val SparkAmber = Color(0xFFF59E0B) // Amber
+val SparkRed = Color(0xFFEF4444)
+
+// Aliases for compatibility
+val SocivaIndigo = SparkIndigo
+val SocivaBlue = SparkBlue
+val SocivaBlueDark = SparkBlueDark
+val SocivaBlueLight = SparkBlueLight
+val SocivaPurple = SparkPurple
+val SocivaPurpleLight = SparkPurpleLight
+val SocivaPink = SparkPink
+val SocivaCyan = SparkCyan
+val SocivaGreen = SparkGreen
+val SocivaAmber = SparkAmber
+val SocivaRed = SparkRed
 
 // Light Theme - Vibrant Palette (#F3F4F9 canvas with crisp white cards)
 val LightBg = Color(0xFFF3F4F9)

@@ -68,7 +68,7 @@ fun SearchScreen(
           OutlinedTextField(
             value = searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
-            placeholder = { Text("Search Sociva...") },
+            placeholder = { Text("Search Spark...") },
             trailingIcon = {
               if (searchQuery.isNotEmpty()) {
                 IconButton(onClick = { viewModel.setSearchQuery("") }) {

@@ -11,16 +11,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val SocivaDarkColorScheme = darkColorScheme(
-  primary = SocivaBlueLight,
+private val SparkDarkColorScheme = darkColorScheme(
+  primary = SparkBlueLight,
   onPrimary = Color(0xFF0F172A),
   primaryContainer = Color(0xFF312E81),
   onPrimaryContainer = Color(0xFFE0E7FF),
-  secondary = SocivaPurpleLight,
+  secondary = SparkPurpleLight,
   onSecondary = Color(0xFF0F172A),
   secondaryContainer = Color(0xFF581C87),
   onSecondaryContainer = Color(0xFFF3E8FF),
-  tertiary = SocivaPink,
+  tertiary = SparkPink,
   background = DarkBg,
   onBackground = DarkOnSurface,
   surface = DarkSurface,
@@ -28,19 +28,19 @@ private val SocivaDarkColorScheme = darkColorScheme(
   surfaceVariant = DarkSurfaceVariant,
   onSurfaceVariant = DarkOnSurfaceVariant,
   outline = DarkOutline,
-  error = SocivaRed
+  error = SparkRed
 )
 
-private val SocivaLightColorScheme = lightColorScheme(
-  primary = SocivaIndigo,
+private val SparkLightColorScheme = lightColorScheme(
+  primary = SparkIndigo,
   onPrimary = Color.White,
   primaryContainer = Color(0xFFEEF2FF),
   onPrimaryContainer = Color(0xFF3730A3),
-  secondary = SocivaPurple,
+  secondary = SparkPurple,
   onSecondary = Color.White,
   secondaryContainer = Color(0xFFFAF5FF),
   onSecondaryContainer = Color(0xFF6B21A8),
-  tertiary = SocivaPink,
+  tertiary = SparkPink,
   background = LightBg,
   onBackground = LightOnSurface,
   surface = LightSurface,
@@ -48,13 +48,16 @@ private val SocivaLightColorScheme = lightColorScheme(
   surfaceVariant = LightSurfaceVariant,
   onSurfaceVariant = LightOnSurfaceVariant,
   outline = LightOutline,
-  error = SocivaRed
+  error = SparkRed
 )
+
+private val SocivaDarkColorScheme = SparkDarkColorScheme
+private val SocivaLightColorScheme = SparkLightColorScheme
 
 @Composable
 fun MyApplicationTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  dynamicColor: Boolean = false, // Use Sociva custom branding by default for high visual identity
+  dynamicColor: Boolean = false, // Use Spark custom branding by default for high visual identity
   content: @Composable () -> Unit,
 ) {
   val colorScheme = when {
@@ -62,8 +65,8 @@ fun MyApplicationTheme(
       val context = LocalContext.current
       if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     }
-    darkTheme -> SocivaDarkColorScheme
-    else -> SocivaLightColorScheme
+    darkTheme -> SparkDarkColorScheme
+    else -> SparkLightColorScheme
   }
 
   MaterialTheme(

@@ -403,7 +403,7 @@ fun StoryEditorScreen(
           } else {
             // Text only story
             viewModel.createStory(
-              text = storyText.ifBlank { "Hello Sociva! ✨" },
+              text = storyText.ifBlank { "Hello Spark! ✨" },
               mediaUrl = null,
               gradientIndex = selectedGradientIndex
             )

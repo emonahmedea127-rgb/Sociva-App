@@ -124,7 +124,7 @@ fun SettingsScreen(
             subtitle = when (settings.profileVisibility) {
               "Friends" -> "Friends Only - Only your friends can view your full profile"
               "Only Me" -> "Private - Only you can view your profile details"
-              else -> "Public - Anyone on or off Sociva can see your profile"
+              else -> "Public - Anyone on or off Spark can see your profile"
             },
             icon = Icons.Default.Visibility,
             onClick = { showVisibilityDialog = true },
@@ -199,17 +199,17 @@ fun SettingsScreen(
       }
 
       // About
-      Text("About Sociva", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+      Text("About Spark", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
       Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
-          Text("Sociva v2.4.0 (Build 2026)", fontWeight = FontWeight.Bold)
-          Text("Connect. Share. Belong.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Spark v2.4.0 (Build 2026)", fontWeight = FontWeight.Bold)
+          Text("Ignite Connections. Share Moments.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Spacer(modifier = Modifier.height(8.dp))
           Text(
-            "Sociva provides dynamic community experiences with real-time conversations, rich post reactions, interactive media stories, and robust personal privacy controls.",
+            "Spark provides dynamic community experiences with real-time conversations, rich post reactions, interactive media stories, and robust personal privacy controls.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -540,7 +540,7 @@ fun ProfileVisibilityDialog(
   onSelect: (String) -> Unit
 ) {
   val options = listOf(
-    Triple("Public", "Anyone on or off Sociva", Icons.Default.Public),
+    Triple("Public", "Anyone on or off Spark", Icons.Default.Public),
     Triple("Friends", "Only your confirmed friends", Icons.Default.People),
     Triple("Only Me", "Only you can view your profile", Icons.Default.Lock)
   )

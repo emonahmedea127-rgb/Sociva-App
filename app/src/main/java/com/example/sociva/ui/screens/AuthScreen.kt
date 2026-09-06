@@ -35,8 +35,8 @@ fun AuthScreen(
 ) {
   var isSignUp by remember { mutableStateOf(false) }
   var fullName by remember { mutableStateOf("") }
-  var email by remember { mutableStateOf("alex.rivera@example.com") }
-  var password by remember { mutableStateOf("SocivaSecure2026!") }
+  var email by remember { mutableStateOf("alex.rivera@spark.com") }
+  var password by remember { mutableStateOf("SparkSecure2026!") }
   var showPassword by remember { mutableStateOf(false) }
 
   Box(
@@ -65,7 +65,7 @@ fun AuthScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-          text = if (isSignUp) "Create your account" else "Welcome back to Sociva",
+          text = if (isSignUp) "Create your account" else "Welcome back to Spark",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
           color = MaterialTheme.colorScheme.onSurface
@@ -161,7 +161,7 @@ fun AuthScreen(
           colors = ButtonDefaults.buttonColors(containerColor = SocivaBlue)
         ) {
           Text(
-            if (isSignUp) "Create Account" else "Log In to Sociva",
+            if (isSignUp) "Create Account" else "Log In to Spark",
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp,
             color = Color.White
@@ -171,7 +171,7 @@ fun AuthScreen(
         // Quick Demo Fill
         FilledTonalButton(
           onClick = {
-            viewModel.login("alex.rivera@sociva.com")
+            viewModel.login("alex.rivera@spark.com")
           },
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(14.dp)
@@ -180,7 +180,7 @@ fun AuthScreen(
         }
 
         Text(
-          text = "By continuing, you agree to Sociva's Terms of Service and Privacy Policy.",
+          text = "By continuing, you agree to Spark's Terms of Service and Privacy Policy.",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           textAlign = androidx.compose.ui.text.style.TextAlign.Center,

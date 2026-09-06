@@ -156,8 +156,35 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     }
   }
 
-  fun getPostAnalytics(postId: String): Flow<PostAnalytics?> {
-    return repository.getPostAnalyticsFlow(postId, _currentUserId.value)
+  fun recordPostViewWithSource(
+    postId: String,
+    isProfileVisitTarget: Boolean = false,
+    source: String = "Home Feed",
+    generatedFollow: Boolean = false
+  ) {
+    viewModelScope.launch {
+      repository.recordPostView(
+        postId = postId,
+        viewerUserId = _currentUserId.value,
+        isProfileVisitTarget = isProfileVisitTarget,
+        source = source,
+        generatedFollow = generatedFollow
+      )
+    }
+  }
+
+  fun recordVideoWatchEvent(event: VideoWatchEvent) {
+    viewModelScope.launch {
+      repository.recordVideoWatchEvent(event)
+    }
+  }
+
+  fun getPostAnalytics(postId: String, timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.ALL_TIME): Flow<PostAnalytics?> {
+    return repository.getPostAnalyticsFlow(postId, _currentUserId.value, timeWindow)
+  }
+
+  fun getVideoAnalytics(postId: String, timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.ALL_TIME): Flow<VideoAnalytics?> {
+    return repository.getVideoAnalyticsFlow(postId, _currentUserId.value, timeWindow)
   }
 
   fun getProfileAnalytics(timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.LAST_7_DAYS): Flow<ProfileAnalytics?> {
@@ -519,7 +546,7 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
       prefs.edit().putString("auth_user_id", targetId).putBoolean("is_logged_in", true).apply()
       repository.setUserPresence(targetId, isOnline = true)
     }
-    showToast("Welcome to Sociva, $email!")
+    showToast("Welcome to Spark, $email!")
   }
 
   fun logout() {
@@ -557,7 +584,7 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch {
       repository.createPost(author, content, mediaUrls, feeling, audience, taggedUserIds)
       _activeScreen.value = SocivaScreen.MAIN
-      showToast("Your post has been published to Sociva! 🎉")
+      showToast("Your post has been published to Spark! 🎉")
     }
   }
 
@@ -834,7 +861,7 @@ class SocivaViewModel(application: Application) : AndroidViewModel(application) 
       _uploadState.value = UploadState.Success(uploadedUrls.firstOrNull() ?: "", MediaType.POST_MEDIA)
       _pendingPostUris.value = emptyList()
       _activeScreen.value = SocivaScreen.MAIN
-      showToast("Your post has been published to Sociva! 🎉")
+      showToast("Your post has been published to Spark! 🎉")
       delay(800)
       _uploadState.value = UploadState.Idle
     }

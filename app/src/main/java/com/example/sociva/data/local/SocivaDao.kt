@@ -798,6 +798,100 @@ interface SocivaDao {
     ORDER BY pv.viewedAt ASC
   """)
   fun getPostViewsForUserSince(userId: String, sinceTimestamp: Long): Flow<List<PostViewEntity>>
+
+  // ==========================================
+  // Video Analytics & Watched Events Queries
+  // ==========================================
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertVideoWatchEvent(event: VideoWatchEventEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertVideoWatchEvents(events: List<VideoWatchEventEntity>)
+
+  @Query("""
+    SELECT * FROM video_watch_events 
+    WHERE postId = :postId 
+      AND (:sinceTimestamp <= 0 OR watchedAt >= :sinceTimestamp)
+    ORDER BY watchedAt ASC
+  """)
+  fun getVideoWatchEventsForPost(postId: String, sinceTimestamp: Long = 0L): Flow<List<VideoWatchEventEntity>>
+
+  @Query("""
+    SELECT COUNT(*) FROM video_watch_events 
+    WHERE postId = :postId 
+      AND (:sinceTimestamp <= 0 OR watchedAt >= :sinceTimestamp)
+  """)
+  fun getTotalVideoWatchCountForPost(postId: String, sinceTimestamp: Long = 0L): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(DISTINCT viewerId) FROM video_watch_events 
+    WHERE postId = :postId 
+      AND (:sinceTimestamp <= 0 OR watchedAt >= :sinceTimestamp)
+  """)
+  fun getUniqueVideoViewersForPost(postId: String, sinceTimestamp: Long = 0L): Flow<Int>
+
+  @Query("""
+    SELECT COALESCE(SUM(watchedDuration), 0) FROM video_watch_events 
+    WHERE postId = :postId 
+      AND (:sinceTimestamp <= 0 OR watchedAt >= :sinceTimestamp)
+  """)
+  fun getTotalVideoWatchTimeForPost(postId: String, sinceTimestamp: Long = 0L): Flow<Long>
+
+  @Query("""
+    SELECT COUNT(*) FROM video_watch_events 
+    WHERE postId = :postId 
+      AND completed = 1
+      AND (:sinceTimestamp <= 0 OR watchedAt >= :sinceTimestamp)
+  """)
+  fun getCompletedVideoViewsForPost(postId: String, sinceTimestamp: Long = 0L): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(*) FROM video_watch_events 
+    WHERE postId = :postId 
+      AND isReplay = 1
+      AND (:sinceTimestamp <= 0 OR watchedAt >= :sinceTimestamp)
+  """)
+  fun getReplaysCountForPost(postId: String, sinceTimestamp: Long = 0L): Flow<Int>
+
+  // Additional Post Analytics Queries with timestamp filter
+  @Query("""
+    SELECT * FROM post_views 
+    WHERE postId = :postId 
+      AND (:sinceTimestamp <= 0 OR viewedAt >= :sinceTimestamp)
+    ORDER BY viewedAt ASC
+  """)
+  fun getPostViewsSince(postId: String, sinceTimestamp: Long): Flow<List<PostViewEntity>>
+
+  @Query("""
+    SELECT COUNT(*) FROM post_views 
+    WHERE postId = :postId 
+      AND (:sinceTimestamp <= 0 OR viewedAt >= :sinceTimestamp)
+  """)
+  fun getTotalViewsForPostSince(postId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(DISTINCT viewerUserId) FROM post_views 
+    WHERE postId = :postId 
+      AND (:sinceTimestamp <= 0 OR viewedAt >= :sinceTimestamp)
+  """)
+  fun getUniqueViewersForPostSince(postId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(*) FROM post_views 
+    WHERE postId = :postId 
+      AND generatedFollow = 1
+      AND (:sinceTimestamp <= 0 OR viewedAt >= :sinceTimestamp)
+  """)
+  fun getFollowersGainedForPostSince(postId: String, sinceTimestamp: Long): Flow<Int>
+
+  @Query("""
+    SELECT COUNT(*) FROM post_views 
+    WHERE postId = :postId 
+      AND generatedProfileVisit = 1
+      AND (:sinceTimestamp <= 0 OR viewedAt >= :sinceTimestamp)
+  """)
+  fun getProfileVisitsFromPostSince(postId: String, sinceTimestamp: Long): Flow<Int>
 }
 
 data class ReactionCountResult(

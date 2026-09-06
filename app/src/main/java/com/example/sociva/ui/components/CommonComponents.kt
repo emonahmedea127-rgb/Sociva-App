@@ -30,6 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import com.example.sociva.data.model.ReactionType
 import com.example.ui.theme.*
 
@@ -48,20 +51,24 @@ fun SocivaLogo(
       modifier = Modifier
         .size(size)
         .clip(RoundedCornerShape(size * 0.28f))
-        .background(SocivaIndigo),
+        .background(
+          Brush.linearGradient(
+            colors = listOf(SocivaIndigo, SocivaPurple)
+          )
+        ),
       contentAlignment = Alignment.Center
     ) {
-      Text(
-        text = "S",
-        color = Color.White,
-        fontWeight = FontWeight.Bold,
-        fontSize = (size.value * 0.58f).sp
+      Image(
+        painter = painterResource(id = R.drawable.spark_app_logo_1788636063462),
+        contentDescription = "Spark",
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop
       )
     }
 
     Column {
       Text(
-        text = "Sociva",
+        text = "Spark",
         fontWeight = FontWeight.Black,
         fontSize = (size.value * 0.62f).sp,
         style = LocalTextStyle.current.copy(
@@ -73,13 +80,22 @@ fun SocivaLogo(
       )
       if (showTagline) {
         Text(
-          text = "Connect. Share. Belong.",
+          text = "Ignite Connections. Share Moments.",
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
       }
     }
   }
+}
+
+@Composable
+fun SparkLogo(
+  modifier: Modifier = Modifier,
+  showTagline: Boolean = false,
+  size: Dp = 38.dp
+) {
+  SocivaLogo(modifier, showTagline, size)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,7 +122,7 @@ fun SocivaTopBar(
       ) {
         Icon(
           imageVector = Icons.Default.Search,
-          contentDescription = "Search Sociva",
+          contentDescription = "Search Spark",
           tint = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.size(20.dp)
         )

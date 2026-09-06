@@ -737,7 +737,7 @@ fun EditProfileScreen(
               )
 
               Text(
-                text = "ℹ️ Tagging a Sociva friend sends a relationship request. Once approved, it appears reciprocally on both profiles.",
+                text = "ℹ️ Tagging a Spark friend sends a relationship request. Once approved, it appears reciprocally on both profiles.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
@@ -1251,7 +1251,7 @@ fun EditProfileScreen(
           }
 
           Text(
-            "Choose from your Sociva friends to link your relationship:",
+            "Choose from your Spark friends to link your relationship:",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 12.dp)

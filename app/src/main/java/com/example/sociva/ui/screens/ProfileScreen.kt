@@ -1064,7 +1064,7 @@ fun ProfileScreen(
                   if (!user?.joinedDate.isNullOrBlank()) {
                     AboutInfoRow(
                       icon = Icons.Default.CalendarToday,
-                      title = "Joined Sociva",
+                      title = "Joined Spark",
                       value = user?.joinedDate ?: ""
                     )
                   }
@@ -1298,7 +1298,7 @@ fun ProfileScreen(
   if (showRemoveAvatarConfirm && user != null) {
     RemovePhotoConfirmDialog(
       title = "Remove Profile Picture?",
-      message = "Are you sure you want to remove your profile picture? Your profile will display Sociva's default avatar.",
+      message = "Are you sure you want to remove your profile picture? Your profile will display Spark's default avatar.",
       onConfirm = {
         showRemoveAvatarConfirm = false
         viewModel.removeProfilePicture(user!!.id)

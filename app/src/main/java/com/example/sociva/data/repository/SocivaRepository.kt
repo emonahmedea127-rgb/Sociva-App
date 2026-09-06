@@ -2122,7 +2122,9 @@ class SocivaRepository(
   suspend fun recordPostView(
     postId: String,
     viewerUserId: String,
-    isProfileVisitTarget: Boolean = false
+    isProfileVisitTarget: Boolean = false,
+    source: String = "Home Feed",
+    generatedFollow: Boolean = false
   ) {
     // Validation: cannot record view without viewer or post
     if (postId.isBlank() || viewerUserId.isBlank()) return
@@ -2136,9 +2138,19 @@ class SocivaRepository(
     val recentView = dao.getRecentPostView(postId, viewerUserId, tenMinutesAgo)
 
     if (recentView != null) {
-      // If the viewer subsequently visited the author's profile from this post within the window, update flag
+      // If the viewer subsequently visited the author's profile or followed from this post, update flags
+      var updated = recentView
+      var changed = false
       if (isProfileVisitTarget && !recentView.generatedProfileVisit) {
-        dao.insertPostView(recentView.copy(generatedProfileVisit = true))
+        updated = updated.copy(generatedProfileVisit = true)
+        changed = true
+      }
+      if (generatedFollow && !recentView.generatedFollow) {
+        updated = updated.copy(generatedFollow = true)
+        changed = true
+      }
+      if (changed) {
+        dao.insertPostView(updated)
       }
       return
     }
@@ -2150,28 +2162,79 @@ class SocivaRepository(
       viewerUserId = viewerUserId,
       viewedAt = System.currentTimeMillis(),
       createdAt = System.currentTimeMillis(),
-      generatedProfileVisit = isProfileVisitTarget
+      generatedProfileVisit = isProfileVisitTarget,
+      generatedFollow = generatedFollow,
+      source = source
     )
     dao.insertPostView(viewEntity)
   }
 
+  suspend fun recordVideoWatchEvent(event: VideoWatchEvent) {
+    if (event.postId.isBlank() || event.viewerId.isBlank()) return
+    val post = dao.findPostById(event.postId) ?: return
+    // Don't count post owner's views
+    if (post.authorId == event.viewerId) return
+
+    // Record post view if watched at least 2 seconds
+    if (event.watchedDuration >= 2000L) {
+      recordPostView(
+        postId = event.postId,
+        viewerUserId = event.viewerId,
+        source = event.source
+      )
+    }
+
+    val entity = VideoWatchEventEntity(
+      id = "vwe_${UUID.randomUUID().toString().take(12)}",
+      postId = event.postId,
+      videoId = event.videoId,
+      viewerId = event.viewerId,
+      sessionId = event.sessionId,
+      startedAt = event.startedAt,
+      lastPosition = event.lastPosition,
+      watchedDuration = event.watchedDuration,
+      videoDuration = event.videoDuration,
+      completed = event.completed,
+      isReplay = event.isReplay,
+      source = event.source,
+      watchedAt = event.watchedAt
+    )
+    dao.insertVideoWatchEvent(entity)
+  }
+
   fun getPostAnalyticsFlow(
     postId: String,
-    requestingUserId: String
+    requestingUserId: String,
+    timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.ALL_TIME
   ): Flow<PostAnalytics?> {
+    val now = System.currentTimeMillis()
+    val sinceTimestamp: Long = when (timeWindow) {
+      AnalyticsTimeWindow.TODAY -> {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        cal.timeInMillis
+      }
+      AnalyticsTimeWindow.LAST_7_DAYS -> now - (7L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.LAST_28_DAYS -> now - (28L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.LAST_30_DAYS -> now - (30L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.ALL_TIME -> 0L
+    }
+
     return combine(
       dao.getPostById(postId),
-      dao.getTotalViewsForPost(postId),
-      dao.getUniqueViewersForPost(postId),
+      dao.getPostViewsSince(postId, sinceTimestamp),
       dao.getReactionsCountForPost(postId),
       dao.getCommentsCountForPost(postId),
       dao.getRepliesCountForPost(postId),
       dao.getSharesCountForPost(postId),
       dao.getSavesCountForPost(postId),
-      dao.getProfileVisitsFromPost(postId),
+      dao.getProfileVisitsFromPostSince(postId, sinceTimestamp),
+      dao.getFollowersGainedForPostSince(postId, sinceTimestamp),
       dao.getReactionBreakdownForPost(postId),
-      dao.getRecentViewersForPost(postId, 15),
-      dao.getAllViewsForPost(postId)
+      dao.getRecentViewersForPost(postId, 15)
     ) { results ->
       val post = results[0] as? PostEntity ?: return@combine null
 
@@ -2180,48 +2243,189 @@ class SocivaRepository(
         return@combine null
       }
 
-      val totalViews = (results[1] as? Int) ?: 0
-      val uniqueViewers = (results[2] as? Int) ?: 0
-      val reactionsCount = (results[3] as? Int) ?: 0
-      val commentsCount = (results[4] as? Int) ?: 0
-      val repliesCount = (results[5] as? Int) ?: 0
-      val sharesCount = (results[6] as? Int) ?: 0
-      val savesCount = (results[7] as? Int) ?: 0
-      val profileVisits = (results[8] as? Int) ?: 0
+      @Suppress("UNCHECKED_CAST")
+      val views = (results[1] as? List<PostViewEntity>) ?: emptyList()
+      val reactionsCount = (results[2] as? Int) ?: 0
+      val commentsCount = (results[3] as? Int) ?: 0
+      val repliesCount = (results[4] as? Int) ?: 0
+      val sharesCount = (results[5] as? Int) ?: 0
+      val savesCount = (results[6] as? Int) ?: 0
+      val profileVisits = (results[7] as? Int) ?: 0
+      val followersGained = (results[8] as? Int) ?: 0
       @Suppress("UNCHECKED_CAST")
       val reactionBreakdownRaw = (results[9] as? List<ReactionCountResult>) ?: emptyList()
       @Suppress("UNCHECKED_CAST")
       val recentViewerEntities = (results[10] as? List<UserEntity>) ?: emptyList()
-      @Suppress("UNCHECKED_CAST")
-      val allViews = (results[11] as? List<PostViewEntity>) ?: emptyList()
 
-      // Engagement rate calculation: (Reactions + Comments + Shares + Saves) / Views * 100
+      val totalViews = views.size
+      val uniqueViewers = views.map { it.viewerUserId }.distinct().size
+      val reach = uniqueViewers
+
+      // Engagement rate calculation: (Reactions + Comments + Shares + Saves) / Reach * 100
       val totalInteractions = reactionsCount + commentsCount + sharesCount + savesCount
-      val engagementRate = if (totalViews > 0) {
-        (totalInteractions.toDouble() / totalViews.toDouble()) * 100.0
+      val engagementRate = if (reach > 0) {
+        (totalInteractions.toDouble() / reach.toDouble()) * 100.0
       } else if (totalInteractions > 0) {
         100.0
       } else {
         0.0
       }
 
-      // Group views by hour or day for mini sparkline/chart
-      val viewsOverTime = computeViewsDistribution(allViews)
+      val viewsOverTime = computeViewsDistributionForWindow(views, timeWindow)
+      val reachOverTime = computeReachDistributionForWindow(views, timeWindow)
+      val engagementOverTime = computeEngagementDistributionForWindow(views, totalInteractions, timeWindow)
 
       PostAnalytics(
         postId = postId,
+        ownerId = post.authorId,
         totalViews = totalViews,
         uniqueViewers = uniqueViewers,
-        reactionsCount = reactionsCount,
-        commentsCount = commentsCount,
-        repliesCount = repliesCount,
-        sharesCount = sharesCount,
-        savesCount = savesCount,
-        profileVisitsFromPost = profileVisits,
+        reach = reach,
+        reactionCount = reactionsCount,
+        commentCount = commentsCount,
+        replyCount = repliesCount,
+        shareCount = sharesCount,
+        saveCount = savesCount,
+        profileVisitCount = profileVisits,
+        followersGained = followersGained,
         engagementRate = engagementRate,
         reactionBreakdown = reactionBreakdownRaw.associate { it.reactionType to it.count },
         recentViewers = recentViewerEntities.map { it.toDomain() },
-        viewsOverTime = viewsOverTime
+        viewsOverTime = viewsOverTime,
+        reachOverTime = reachOverTime,
+        engagementOverTime = engagementOverTime,
+        timeWindow = timeWindow,
+        createdAt = post.timestamp,
+        updatedAt = System.currentTimeMillis()
+      )
+    }
+  }
+
+  fun getVideoAnalyticsFlow(
+    postId: String,
+    requestingUserId: String,
+    timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.ALL_TIME
+  ): Flow<VideoAnalytics?> {
+    val now = System.currentTimeMillis()
+    val sinceTimestamp: Long = when (timeWindow) {
+      AnalyticsTimeWindow.TODAY -> {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        cal.timeInMillis
+      }
+      AnalyticsTimeWindow.LAST_7_DAYS -> now - (7L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.LAST_28_DAYS -> now - (28L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.LAST_30_DAYS -> now - (30L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.ALL_TIME -> 0L
+    }
+
+    return combine(
+      dao.getPostById(postId),
+      dao.getVideoWatchEventsForPost(postId, sinceTimestamp),
+      dao.getReactionsCountForPost(postId),
+      dao.getCommentsCountForPost(postId),
+      dao.getRepliesCountForPost(postId),
+      dao.getSharesCountForPost(postId),
+      dao.getSavesCountForPost(postId),
+      dao.getProfileVisitsFromPostSince(postId, sinceTimestamp),
+      dao.getFollowersGainedForPostSince(postId, sinceTimestamp)
+    ) { results ->
+      val post = results[0] as? PostEntity ?: return@combine null
+
+      // Privacy / Authorization rule: Only author can access video analytics
+      if (post.authorId != requestingUserId) {
+        return@combine null
+      }
+
+      @Suppress("UNCHECKED_CAST")
+      val events = (results[1] as? List<VideoWatchEventEntity>) ?: emptyList()
+      val reactionsCount = (results[2] as? Int) ?: 0
+      val commentsCount = (results[3] as? Int) ?: 0
+      val repliesCount = (results[4] as? Int) ?: 0
+      val sharesCount = (results[5] as? Int) ?: 0
+      val savesCount = (results[6] as? Int) ?: 0
+      val profileVisits = (results[7] as? Int) ?: 0
+      val followersGained = (results[8] as? Int) ?: 0
+
+      val videoDuration = events.maxOfOrNull { it.videoDuration }?.takeIf { it > 0 } ?: 120_000L
+      val validWatchEvents = events.filter { it.watchedDuration >= 2000L || it.completed }
+      val totalViews = validWatchEvents.size
+      val uniqueViewers = events.map { it.viewerId }.distinct().size
+      val totalWatchTime = events.sumOf { it.watchedDuration }
+      val averageWatchTimeSeconds = if (totalViews > 0) {
+        (totalWatchTime.toDouble() / 1000.0) / totalViews.toDouble()
+      } else {
+        0.0
+      }
+      val averagePercentageWatched = if (videoDuration > 0) {
+        ((averageWatchTimeSeconds * 1000.0) / videoDuration.toDouble()) * 100.0
+      } else {
+        0.0
+      }
+      val completionRate = if (totalViews > 0) {
+        (events.count { it.completed }.toDouble() / totalViews.toDouble()) * 100.0
+      } else {
+        0.0
+      }
+      val replays = events.count { it.isReplay }
+
+      val totalInteractions = reactionsCount + commentsCount + sharesCount + savesCount
+      val engagementRate = if (uniqueViewers > 0) {
+        (totalInteractions.toDouble() / uniqueViewers.toDouble()) * 100.0
+      } else if (totalInteractions > 0) {
+        100.0
+      } else {
+        0.0
+      }
+
+      // Viewer Retention points at 0%, 10%, 25%, 50%, 75%, 90%, 100%
+      val retentionPoints = if (events.isEmpty()) {
+        emptyList()
+      } else {
+        listOf(0, 10, 25, 50, 75, 90, 100).map { pct ->
+          val thresholdMs = (pct / 100.0) * videoDuration
+          val stillWatching = events.count { it.lastPosition >= thresholdMs || (it.completed && pct <= 100) }
+          val retentionPct = (stillWatching.toDouble() / events.size.toDouble()) * 100.0
+          pct to retentionPct
+        }
+      }
+
+      // Traffic source breakdown
+      val trafficSources = if (events.isEmpty()) {
+        emptyMap()
+      } else {
+        events.groupBy { it.source.ifBlank { "Home Feed" } }
+          .mapValues { it.value.size }
+      }
+
+      VideoAnalytics(
+        postId = postId,
+        videoId = events.firstOrNull()?.videoId ?: "",
+        ownerId = post.authorId,
+        videoDuration = videoDuration,
+        totalViews = totalViews,
+        uniqueViewers = uniqueViewers,
+        totalWatchTime = totalWatchTime,
+        averageWatchTime = averageWatchTimeSeconds,
+        averagePercentageWatched = averagePercentageWatched.coerceIn(0.0, 100.0),
+        completionRate = completionRate.coerceIn(0.0, 100.0),
+        replays = replays,
+        reactionCount = reactionsCount,
+        commentCount = commentsCount,
+        replyCount = repliesCount,
+        shareCount = sharesCount,
+        saveCount = savesCount,
+        profileVisitCount = profileVisits,
+        followersGained = followersGained,
+        engagementRate = engagementRate,
+        retentionPoints = retentionPoints,
+        trafficSources = trafficSources,
+        timeWindow = timeWindow,
+        createdAt = post.timestamp,
+        updatedAt = System.currentTimeMillis()
       )
     }
   }
@@ -2238,7 +2442,9 @@ class SocivaRepository(
 
     val now = System.currentTimeMillis()
     val sinceTimestamp: Long = when (timeWindow) {
+      AnalyticsTimeWindow.TODAY -> now - (24L * 60 * 60 * 1000)
       AnalyticsTimeWindow.LAST_7_DAYS -> now - (7L * 24 * 60 * 60 * 1000)
+      AnalyticsTimeWindow.LAST_28_DAYS -> now - (28L * 24 * 60 * 60 * 1000)
       AnalyticsTimeWindow.LAST_30_DAYS -> now - (30L * 24 * 60 * 60 * 1000)
       AnalyticsTimeWindow.ALL_TIME -> 0L
     }
@@ -2331,10 +2537,111 @@ class SocivaRepository(
     return map.toList()
   }
 
+  private fun computeViewsDistributionForWindow(
+    views: List<PostViewEntity>,
+    timeWindow: AnalyticsTimeWindow
+  ): List<Pair<String, Int>> {
+    if (views.isEmpty()) return emptyList()
+
+    val cal = Calendar.getInstance()
+    val now = System.currentTimeMillis()
+    val (numBuckets, bucketDurationMs, formatLabel) = when (timeWindow) {
+      AnalyticsTimeWindow.TODAY -> Triple(6, 4 * 60 * 60 * 1000L) { c: Calendar ->
+        "${c.get(Calendar.HOUR_OF_DAY)}:00"
+      }
+      AnalyticsTimeWindow.LAST_7_DAYS -> Triple(7, 24 * 60 * 60 * 1000L) { c: Calendar ->
+        when (c.get(Calendar.DAY_OF_WEEK)) {
+          Calendar.SUNDAY -> "Sun"; Calendar.MONDAY -> "Mon"; Calendar.TUESDAY -> "Tue"
+          Calendar.WEDNESDAY -> "Wed"; Calendar.THURSDAY -> "Thu"; Calendar.FRIDAY -> "Fri"
+          else -> "Sat"
+        }
+      }
+      AnalyticsTimeWindow.LAST_28_DAYS, AnalyticsTimeWindow.LAST_30_DAYS -> Triple(4, 7 * 24 * 60 * 60 * 1000L) { c: Calendar ->
+        "W${4 - (now - c.timeInMillis) / (7 * 24 * 60 * 60 * 1000L)}"
+      }
+      AnalyticsTimeWindow.ALL_TIME -> Triple(7, 24 * 60 * 60 * 1000L) { c: Calendar ->
+        "${c.get(Calendar.MONTH) + 1}/${c.get(Calendar.DAY_OF_MONTH)}"
+      }
+    }
+
+    val result = mutableListOf<Pair<String, Int>>()
+    for (i in (numBuckets - 1) downTo 0) {
+      val start = now - ((i + 1) * bucketDurationMs)
+      val end = now - (i * bucketDurationMs)
+      cal.timeInMillis = end
+      val label = formatLabel(cal)
+      val count = views.count { it.viewedAt in (start + 1)..end }
+      result.add(label to count)
+    }
+    return result
+  }
+
+  private fun computeReachDistributionForWindow(
+    views: List<PostViewEntity>,
+    timeWindow: AnalyticsTimeWindow
+  ): List<Pair<String, Int>> {
+    if (views.isEmpty()) return emptyList()
+
+    val cal = Calendar.getInstance()
+    val now = System.currentTimeMillis()
+    val (numBuckets, bucketDurationMs, formatLabel) = when (timeWindow) {
+      AnalyticsTimeWindow.TODAY -> Triple(6, 4 * 60 * 60 * 1000L) { c: Calendar ->
+        "${c.get(Calendar.HOUR_OF_DAY)}:00"
+      }
+      AnalyticsTimeWindow.LAST_7_DAYS -> Triple(7, 24 * 60 * 60 * 1000L) { c: Calendar ->
+        when (c.get(Calendar.DAY_OF_WEEK)) {
+          Calendar.SUNDAY -> "Sun"; Calendar.MONDAY -> "Mon"; Calendar.TUESDAY -> "Tue"
+          Calendar.WEDNESDAY -> "Wed"; Calendar.THURSDAY -> "Thu"; Calendar.FRIDAY -> "Fri"
+          else -> "Sat"
+        }
+      }
+      AnalyticsTimeWindow.LAST_28_DAYS, AnalyticsTimeWindow.LAST_30_DAYS -> Triple(4, 7 * 24 * 60 * 60 * 1000L) { c: Calendar ->
+        "W${4 - (now - c.timeInMillis) / (7 * 24 * 60 * 60 * 1000L)}"
+      }
+      AnalyticsTimeWindow.ALL_TIME -> Triple(7, 24 * 60 * 60 * 1000L) { c: Calendar ->
+        "${c.get(Calendar.MONTH) + 1}/${c.get(Calendar.DAY_OF_MONTH)}"
+      }
+    }
+
+    val result = mutableListOf<Pair<String, Int>>()
+    for (i in (numBuckets - 1) downTo 0) {
+      val start = now - ((i + 1) * bucketDurationMs)
+      val end = now - (i * bucketDurationMs)
+      cal.timeInMillis = end
+      val label = formatLabel(cal)
+      val uniqueUsers = views.filter { it.viewedAt in (start + 1)..end }.map { it.viewerUserId }.distinct().size
+      result.add(label to uniqueUsers)
+    }
+    return result
+  }
+
+  private fun computeEngagementDistributionForWindow(
+    views: List<PostViewEntity>,
+    totalInteractions: Int,
+    timeWindow: AnalyticsTimeWindow
+  ): List<Pair<String, Double>> {
+    if (views.isEmpty() || totalInteractions == 0) return emptyList()
+
+    val reachDist = computeReachDistributionForWindow(views, timeWindow)
+    val totalViewsCount = views.size.coerceAtLeast(1)
+    return reachDist.map { (label, count) ->
+      val rate = if (count > 0) {
+        // Proportion of interactions allocated to bucket relative to views
+        val bucketInteractions = (totalInteractions.toDouble() * (count.toDouble() / totalViewsCount.toDouble()))
+        (bucketInteractions / count.toDouble()) * 100.0
+      } else {
+        0.0
+      }
+      label to rate.coerceAtMost(100.0)
+    }
+  }
+
   private fun computeDailyTrend(views: List<PostViewEntity>, timeWindow: AnalyticsTimeWindow): List<Pair<String, Int>> {
     val cal = Calendar.getInstance()
     val numDays = when (timeWindow) {
+      AnalyticsTimeWindow.TODAY -> 1
       AnalyticsTimeWindow.LAST_7_DAYS -> 7
+      AnalyticsTimeWindow.LAST_28_DAYS -> 14
       AnalyticsTimeWindow.LAST_30_DAYS -> 14 // 14 sample points for 30 days
       AnalyticsTimeWindow.ALL_TIME -> 7
     }

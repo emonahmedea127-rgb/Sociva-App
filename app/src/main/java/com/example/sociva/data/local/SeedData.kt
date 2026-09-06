@@ -246,7 +246,7 @@ object SeedData {
       authorAvatar = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop",
       isAuthorVerified = true,
       timestamp = now - (1000 * 60 * 90), // 1.5 hours ago
-      content = "Excited to welcome everyone to Sociva! We designed this space to celebrate genuine connection, thoughtful conversations, and inspiring craft. Looking forward to hearing all your thoughts on the new interface! ✨🚀",
+      content = "Excited to welcome everyone to Spark! We designed this space to celebrate genuine connection, thoughtful conversations, and inspiring craft. Looking forward to hearing all your thoughts on the new interface! ✨🚀",
       mediaUrlsString = "",
       feelingOrActivity = "feeling excited 🎉",
       audience = "Public",
@@ -282,7 +282,7 @@ object SeedData {
       authorAvatar = "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300&h=300&fit=crop",
       isAuthorVerified = true,
       timestamp = now - (1000 * 60 * 360), // 6 hours ago
-      content = "Finished this generative color study for Sociva's identity system. Notice how the fluid indigo and ultraviolet transition creates warmth without losing clarity. Swipe to explore the color breakdowns!",
+      content = "Finished this generative color study for Spark's identity system. Notice how the fluid indigo and ultraviolet transition creates warmth without losing clarity. Swipe to explore the color breakdowns!",
       mediaUrlsString = "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=900&h=600&fit=crop,https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=900&h=600&fit=crop,https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=900&h=600&fit=crop",
       feelingOrActivity = "feeling creative 🎨",
       audience = "Public",
@@ -488,7 +488,7 @@ object SeedData {
       userAvatar = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop",
       isUserVerified = true,
       mediaUrl = "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&h=900&fit=crop",
-      textOverlay = "Shipping Sociva 1.0! 🚀💫",
+      textOverlay = "Shipping Spark 1.0! 🚀💫",
       backgroundGradientIndex = 0,
       timestamp = now - (1000 * 60 * 45),
       expiresAt = now + (1000 * 60 * 60 * 23),
@@ -656,7 +656,7 @@ object SeedData {
       participantUsername = "mayapatel",
       participantAvatar = "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300&h=300&fit=crop",
       isParticipantVerified = true,
-      lastMessage = "Love the new post composer animations on Sociva! So snappy.",
+      lastMessage = "Love the new post composer animations on Spark! So snappy.",
       lastMessageTimestamp = now - (1000 * 60 * 120),
       unreadCount = 0,
       isOnline = true
@@ -758,7 +758,7 @@ object SeedData {
       conversationId = "conv_maya",
       senderId = "user_maya",
       receiverId = "user_me",
-      text = "Love the new post composer animations on Sociva! So snappy.",
+      text = "Love the new post composer animations on Spark! So snappy.",
       mediaUrl = null,
       timestamp = now - (1000 * 60 * 120),
       isSeen = true,
@@ -784,7 +784,7 @@ object SeedData {
       actorName = "Sarah Chen",
       actorAvatar = "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300&h=300&fit=crop",
       isActorVerified = true,
-      messageSnippet = "loved your post 'Excited to welcome everyone to Sociva!'",
+      messageSnippet = "loved your post 'Excited to welcome everyone to Spark!'",
       timestamp = now - (1000 * 60 * 15),
       isRead = false,
       targetPostId = "post_2"
@@ -891,9 +891,9 @@ object SeedData {
   val pages = listOf(
     SocivaPageEntity(
       id = "page_1",
-      name = "Sociva Creators",
+      name = "Spark Creators",
       category = "Community & Innovation",
-      description = "The official community for creators, designers, and developers shaping the future on Sociva.",
+      description = "The official community for creators, designers, and developers shaping the future on Spark.",
       avatarUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&h=300&fit=crop",
       coverUrl = "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=900&h=300&fit=crop",
       followersCount = 28400,

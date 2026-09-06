@@ -106,7 +106,7 @@ fun ProfilePictureActionSheet(
         PhotoActionRow(
           icon = Icons.Default.DeleteOutline,
           title = "Remove profile picture",
-          subtitle = "Reset to Sociva default avatar",
+          subtitle = "Reset to Spark default avatar",
           isDestructive = true,
           onClick = {
             onDismiss()
@@ -188,7 +188,7 @@ fun CoverPhotoActionSheet(
         PhotoActionRow(
           icon = Icons.Default.DeleteOutline,
           title = "Remove cover photo",
-          subtitle = "Reset to Sociva default gradient cover",
+          subtitle = "Reset to Spark default gradient cover",
           isDestructive = true,
           onClick = {
             onDismiss()

@@ -149,7 +149,8 @@ enum class PostType {
   NORMAL,
   PROFILE_PICTURE_UPDATE,
   COVER_PHOTO_UPDATE,
-  SHARED_POST
+  SHARED_POST,
+  VIDEO
 }
 
 data class SharedPostPreview(
@@ -450,26 +451,107 @@ data class RelationshipContext(
 )
 
 enum class AnalyticsTimeWindow(val label: String) {
+  TODAY("Today"),
   LAST_7_DAYS("7 Days"),
+  LAST_28_DAYS("28 Days"),
   LAST_30_DAYS("30 Days"),
   ALL_TIME("All Time")
 }
 
 data class PostAnalytics(
   val postId: String,
+  val ownerId: String = "",
   val totalViews: Int = 0,
   val uniqueViewers: Int = 0,
-  val reactionsCount: Int = 0,
-  val commentsCount: Int = 0,
-  val repliesCount: Int = 0,
-  val sharesCount: Int = 0,
-  val savesCount: Int = 0,
-  val profileVisitsFromPost: Int = 0,
+  val reach: Int = 0,
+  val reactionCount: Int = 0,
+  val commentCount: Int = 0,
+  val replyCount: Int = 0,
+  val shareCount: Int = 0,
+  val saveCount: Int = 0,
+  val profileVisitCount: Int = 0,
+  val followersGained: Int = 0,
   val engagementRate: Double = 0.0,
   val reactionBreakdown: Map<String, Int> = emptyMap(),
   val recentViewers: List<User> = emptyList(),
-  val viewsOverTime: List<Pair<String, Int>> = emptyList()
+  val viewsOverTime: List<Pair<String, Int>> = emptyList(),
+  val reachOverTime: List<Pair<String, Int>> = emptyList(),
+  val engagementOverTime: List<Pair<String, Double>> = emptyList(),
+  val timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.ALL_TIME,
+  val createdAt: Long = 0L,
+  val updatedAt: Long = 0L
+) {
+  // Backward-compatibility aliases
+  val reactionsCount: Int get() = reactionCount
+  val commentsCount: Int get() = commentCount
+  val repliesCount: Int get() = replyCount
+  val sharesCount: Int get() = shareCount
+  val savesCount: Int get() = saveCount
+  val profileVisitsFromPost: Int get() = profileVisitCount
+}
+
+data class VideoAnalytics(
+  val postId: String,
+  val videoId: String = "",
+  val ownerId: String = "",
+  val videoDuration: Long = 0L, // in milliseconds
+  val totalViews: Int = 0,
+  val uniqueViewers: Int = 0,
+  val totalWatchTime: Long = 0L, // in milliseconds
+  val averageWatchTime: Double = 0.0, // in seconds
+  val averagePercentageWatched: Double = 0.0, // e.g. 46.5%
+  val completionRate: Double = 0.0, // e.g. 78.0%
+  val replays: Int = 0,
+  val reactionCount: Int = 0,
+  val commentCount: Int = 0,
+  val replyCount: Int = 0,
+  val shareCount: Int = 0,
+  val saveCount: Int = 0,
+  val profileVisitCount: Int = 0,
+  val followersGained: Int = 0,
+  val engagementRate: Double = 0.0,
+  val retentionPoints: List<Pair<Int, Double>> = emptyList(), // e.g. (0, 100.0), (10, 85.0), ...
+  val trafficSources: Map<String, Int> = emptyMap(),
+  val timeWindow: AnalyticsTimeWindow = AnalyticsTimeWindow.ALL_TIME,
+  val createdAt: Long = 0L,
+  val updatedAt: Long = 0L
 )
+
+data class VideoWatchEvent(
+  val postId: String,
+  val videoId: String,
+  val viewerId: String,
+  val sessionId: String,
+  val startedAt: Long,
+  val lastPosition: Long,
+  val watchedDuration: Long,
+  val videoDuration: Long,
+  val completed: Boolean = false,
+  val isReplay: Boolean = false,
+  val source: String = "Home Feed",
+  val watchedAt: Long = System.currentTimeMillis()
+)
+
+fun Post.isVideoPost(): Boolean {
+  if (postType == PostType.VIDEO) return true
+  return mediaUrls.any { url ->
+    url.endsWith(".mp4", ignoreCase = true) ||
+    url.endsWith(".mov", ignoreCase = true) ||
+    url.endsWith(".webm", ignoreCase = true) ||
+    url.contains("video", ignoreCase = true) ||
+    url.contains(".mp4?", ignoreCase = true)
+  }
+}
+
+fun Post.getVideoUrl(): String? {
+  return mediaUrls.firstOrNull { url ->
+    url.endsWith(".mp4", ignoreCase = true) ||
+    url.endsWith(".mov", ignoreCase = true) ||
+    url.endsWith(".webm", ignoreCase = true) ||
+    url.contains("video", ignoreCase = true) ||
+    url.contains(".mp4?", ignoreCase = true)
+  } ?: mediaUrls.firstOrNull()
+}
 
 data class ProfileAnalytics(
   val userId: String,

@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/ic_sociva_logo_1788461265305"
+        android:drawable="@drawable/spark_app_logo_1788636063462"
         android:gravity="center" />
 </layer-list>

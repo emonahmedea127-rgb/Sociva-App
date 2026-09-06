@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
 
       MyApplicationTheme(
         darkTheme = effectiveDarkTheme,
-        dynamicColor = false // Keep Sociva's custom blue/purple visual brand
+        dynamicColor = false // Keep Spark's custom blue/purple visual brand
       ) {
         SocivaApp(
           viewModel = viewModel,

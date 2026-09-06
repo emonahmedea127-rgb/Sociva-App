@@ -492,7 +492,35 @@ data class PostViewEntity(
   val viewerUserId: String,
   val viewedAt: Long = System.currentTimeMillis(),
   val createdAt: Long = System.currentTimeMillis(),
-  val generatedProfileVisit: Boolean = false
+  val generatedProfileVisit: Boolean = false,
+  val generatedFollow: Boolean = false,
+  val source: String = "Home Feed"
+)
+
+@Entity(
+  tableName = "video_watch_events",
+  indices = [
+    Index(value = ["postId"]),
+    Index(value = ["videoId"]),
+    Index(value = ["viewerId"]),
+    Index(value = ["watchedAt"]),
+    Index(value = ["postId", "viewerId", "watchedAt"])
+  ]
+)
+data class VideoWatchEventEntity(
+  @PrimaryKey val id: String,
+  val postId: String,
+  val videoId: String,
+  val viewerId: String,
+  val sessionId: String,
+  val startedAt: Long,
+  val lastPosition: Long,
+  val watchedDuration: Long, // in milliseconds
+  val videoDuration: Long, // in milliseconds
+  val completed: Boolean = false,
+  val isReplay: Boolean = false,
+  val source: String = "Home Feed",
+  val watchedAt: Long = System.currentTimeMillis()
 )
 
 

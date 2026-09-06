@@ -215,7 +215,7 @@ fun SocivaApp(
         NavigationBar(
           containerColor = MaterialTheme.colorScheme.surface,
           tonalElevation = 2.dp,
-          modifier = Modifier.testTag("sociva_bottom_navigation")
+          modifier = Modifier.testTag("spark_bottom_navigation")
         ) {
           navTabs.forEachIndexed { index, tab ->
             val isSelected = selectedTab == index
@@ -268,7 +268,7 @@ fun SocivaApp(
       if (isWideScreen) {
         NavigationRail(
           containerColor = MaterialTheme.colorScheme.surface,
-          modifier = Modifier.testTag("sociva_navigation_rail")
+          modifier = Modifier.testTag("spark_navigation_rail")
         ) {
           Spacer(modifier = Modifier.height(16.dp))
           SocivaLogo(size = 32.dp)

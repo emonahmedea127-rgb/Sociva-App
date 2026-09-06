@@ -160,7 +160,10 @@ fun HomeScreen(
         },
         onRemoveTagClick = { viewModel.removePostTag(post.id) },
         onReactionsClick = { viewModel.openReactionsModal(post.id) },
-        onAnalyticsClick = { viewModel.openPostAnalytics(post.id) }
+        onAnalyticsClick = { viewModel.openPostAnalytics(post.id) },
+        onWatchVideoEvent = { event ->
+          viewModel.recordVideoWatchEvent(event.copy(viewerId = currentUser?.id ?: ""))
+        }
       )
     }
   }
@@ -506,7 +509,8 @@ fun PostCard(
   onSharedAuthorClick: ((String) -> Unit)? = null,
   onRemoveTagClick: (() -> Unit)? = null,
   onReactionsClick: (() -> Unit)? = null,
-  onAnalyticsClick: (() -> Unit)? = null
+  onAnalyticsClick: (() -> Unit)? = null,
+  onWatchVideoEvent: ((VideoWatchEvent) -> Unit)? = null
 ) {
   var showMenu by remember { mutableStateOf(false) }
   var showReactionPicker by remember { mutableStateOf(false) }
@@ -770,6 +774,13 @@ fun PostCard(
               modifier = Modifier.fillMaxSize()
             )
           }
+        } else if (post.isVideoPost()) {
+          val videoUrl = post.getVideoUrl() ?: post.mediaUrls.first()
+          PostVideoPlayer(
+            post = post,
+            videoUrl = videoUrl,
+            onWatchEvent = { event -> onWatchVideoEvent?.invoke(event) }
+          )
         } else {
           PostMediaGallery(mediaUrls = post.mediaUrls)
         }
@@ -1000,6 +1011,38 @@ fun PostCard(
             modifier = Modifier
               .align(Alignment.TopStart)
               .offset(y = (-45).dp, x = 16.dp)
+          )
+        }
+      }
+
+      // Owner-Only "View Analytics" Action Button below the post actions
+      if (post.authorId == currentUser?.id && onAnalyticsClick != null) {
+        HorizontalDivider(
+          modifier = Modifier.padding(horizontal = 14.dp),
+          thickness = 0.5.dp,
+          color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onAnalyticsClick() }
+            .padding(horizontal = 16.dp, vertical = 9.dp)
+            .testTag("post_view_analytics_bottom_btn_${post.id}"),
+          horizontalArrangement = Arrangement.Center,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Icon(
+            imageVector = Icons.Outlined.BarChart,
+            contentDescription = "View Analytics",
+            tint = SocivaBlue,
+            modifier = Modifier.size(17.dp)
+          )
+          Spacer(modifier = Modifier.width(7.dp))
+          Text(
+            text = "View Analytics",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = SocivaBlue
           )
         }
       }

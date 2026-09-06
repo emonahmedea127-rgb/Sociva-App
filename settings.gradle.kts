@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Sociva"
+rootProject.name = "Spark"
 
 include(":app")

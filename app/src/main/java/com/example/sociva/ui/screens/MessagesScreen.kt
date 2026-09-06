@@ -1116,7 +1116,7 @@ fun AccountSwitcherDialog(
           fontWeight = FontWeight.Bold
         )
         Text(
-          text = "Select a registered user to test real-time 2-way messaging across Sociva accounts.",
+          text = "Select a registered user to test real-time 2-way messaging across Spark accounts.",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )

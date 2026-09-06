@@ -41,7 +41,7 @@ fun AdminScreen(
           Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Sociva Admin Console", fontWeight = FontWeight.Bold)
+            Text("Spark Admin Console", fontWeight = FontWeight.Bold)
           }
         },
         navigationIcon = {
